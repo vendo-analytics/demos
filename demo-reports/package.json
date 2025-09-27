@@ -1,0 +1,43 @@
+{
+  "name": "demo-reports",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@blocknote/core": "^0.39.1",
+    "@blocknote/react": "^0.39.1",
+    "@yoopta/blockquote": "^4.9.9",
+    "@yoopta/code": "^4.9.9",
+    "@yoopta/editor": "^4.9.9",
+    "@yoopta/headings": "^4.9.9",
+    "@yoopta/image": "^4.9.9",
+    "@yoopta/link": "^4.9.9",
+    "@yoopta/lists": "^4.9.9",
+    "@yoopta/marks": "^4.9.9",
+    "@yoopta/paragraph": "^4.9.9",
+    "@yoopta/toolbar": "^4.9.9",
+    "chart.js": "^4.5.0",
+    "react": "^19.1.1",
+    "react-chartjs-2": "^5.3.0",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.3",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.4.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.44.0",
+    "vite": "^7.1.7"
+  }
+}

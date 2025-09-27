@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chart.js Interactive Demo - All Chart Types</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Chart Type Navigation -->
+        <nav class="chart-nav">
+            <p><b>Vendo Data Visualisations</b><br>
+            Uses Chart.js for visaulisations other than tables and funnels.</p>
+
+            <div class="nav-section">
+                <h3>📊 Comparison</h3>
+                <button class="nav-btn active" data-chart="line">Line Chart</button>
+                <button class="nav-btn" data-chart="bar">Bar Chart</button>
+                <button class="nav-btn" data-chart="bar-horizontal">Horizontal Bar Chart</button>
+                <button class="nav-btn" data-chart="combo">Combo Chart</button>
+            </div>
+            <div class="nav-section">
+                <h3>🥧 Composition</h3>
+                <button class="nav-btn" data-chart="line-stacked">Stacked Area Chart</button>
+                <button class="nav-btn" data-chart="bar-stacked">Stacked Bar Chart</button>
+                <button class="nav-btn" data-chart="bar-stacked-horizontal">Horizontal Stacked Bar Chart</button>
+                <button class="nav-btn" data-chart="donut">Donut/Pie Chart</button>
+                <button class="nav-btn" data-chart="multiseries">Multi-Series Pie</button>
+            </div>
+            <div class="nav-section">
+                <h3>📊 Analysis</h3>
+                <button class="nav-btn" data-chart="table">Data Table</button>
+                <button class="nav-btn" data-chart="funnel">Funnel Report</button>
+                <button class="nav-btn" data-chart="retention">Retention Analysis</button>
+            </div>
+        </nav>
+        
+        <div class="demo-layout">
+            <!-- Chart Container -->
+            <div class="chart-container">
+                <canvas id="mainChart"></canvas>
+            </div>
+            
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <h3>General Configuration</h3>
+                <div class="control-group">
+                    <label for="colorPalette">Color Palette:</label>
+                    <select id="colorPalette">
+                        <option value="default">Default</option>
+                        <option value="sunset">Sunset</option>
+                        <option value="blueHues">Blue Hues</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="animation">Enable Animation:</label>
+                    <input type="checkbox" id="animation" checked>
+                </div>
+                
+                <h3>Chart Configuration</h3>
+                <div class="control-group">
+                    <label for="chartTypeDropdown">Chart Type:</label>
+                    <select id="chartTypeDropdown">
+                        <optgroup label="📊 Comparison">
+                            <option value="line">Line Chart</option>
+                            <option value="bar">Bar Chart</option>
+                            <option value="bar-horizontal">Horizontal Bar Chart</option>
+                            <option value="combo">Combo Chart</option>
+                        </optgroup>
+                        <optgroup label="🥧 Composition">
+                            <option value="line-stacked">Stacked Area Chart</option>
+                            <option value="bar-stacked">Stacked Bar Chart</option>
+                            <option value="bar-stacked-horizontal">Horizontal Stacked Bar Chart</option>
+                            <option value="donut">Donut/Pie Chart</option>
+                            <option value="multiseries">Multi-Series Pie</option>
+                        </optgroup>
+                        <optgroup label="📊 Analysis">
+                            <option value="table">Data Table</option>
+                            <option value="funnel">Funnel Report</option>
+                            <option value="retention">Retention Analysis</option>
+                        </optgroup>
+                    </select>
+                </div>                
+                <!-- Common Controls -->
+                <div class="control-group">
+                    <label for="titleInput">Chart Title:</label>
+                    <input type="text" id="titleInput" value="Monthly Business Metrics">
+                </div>
+                
+                
+                  <!-- Dynamic Controls Container -->
+                  <div id="dynamicControls">
+                    <!-- Controls will be dynamically populated based on selected chart type -->
+                </div>
+                
+                <!-- Dataset Toggles -->
+                <div class="control-group" id="datasetToggles">
+                    <h4>Dataset Visibility</h4>
+                    <!-- Dynamic dataset toggles -->
+                </div>
+                
+                <!-- Raw Data Display -->
+                <div class="control-group">
+                    <h4>Raw Data</h4>
+                    <button id="toggleRawData">Show/Hide Raw Data</button>
+                    <pre id="rawDataDisplay" style="display: none;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
