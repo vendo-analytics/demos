@@ -7,12 +7,15 @@ Keen turns that into a small graph, finds people and groups who fit, and reaches
 "Keen" is a working name ("who's keen for padel?"). Everything in the demo data is invented.
 
 Open `index.html` in a browser. There's no build step. The right-hand column has design notes for the
-current screen and "Jump to" buttons for each flow.
+current screen and "Jump to" buttons for each flow. The app opens on onboarding; tap **Skip** to use the sample profile.
 
 ## What the prototype covers
 
 | Flow | What to try |
 | --- | --- |
+| Onboarding | Chat with the agent (talk, type or tap quick replies). Watch the profile card fill in. Remove anything with ×. |
+| Ask and feed | With the box empty, browse "Happening near you". Plans that clash with your avoid list are hidden, with a count. |
+| Post a plan | "Football Friday 6pm at Manly Oval, we're 4, need 7". Pick time and venue, see who it reaches, post. Join requests arrive a few seconds later. |
 | Ask | Type anything, or tap an example. Watch the graph fill in. Tap a node to correct it. |
 | Matches | Groups to join, people keen right now, a suggested plan that combines individuals, and the "might be keen" reach-out. |
 | No match | "Board games in Newtown tonight": the ask is saved and passed on, with a "widen radius" option. |
@@ -22,7 +25,7 @@ current screen and "Jump to" buttons for each flow.
 | Feedback | Rate the plan, confirm who came, tag people. Earns Goodwill. |
 | Goodwill | Points, levels, how to earn them, trust badges. |
 
-Login, onboarding and calendar sync are deliberately out of scope.
+Login, photo checks and calendar sync are deliberately out of scope.
 
 ## Core ideas
 
@@ -60,9 +63,19 @@ Person ──INTERESTED_IN {level}──▶ Activity ──IN_CATEGORY──▶ 
 
 Tags are a fixed, curated list so that asks can meet. Synonyms map to one tag (soccer and football become football). Each tag has a category (racquet sports, team sports, water…) used for "close" matches, and one of three families from the original notes: **Sports, Hobbies, Professional skills**. Words that don't match a tag go to a review queue and can become new tags. A banned list (sex, drugs, offensive terms) blocks the ask.
 
-### Parsing
+### Parsing: plain English to graph
 
-In the prototype, `engine.js` uses rules so it runs offline. In production this would be one LLM call with a strict output schema (the same shape as `parseIntent` returns), validated against the tag list and suburb list, and followed by the same screening. If the parser is unsure about a facet, it marks it as a guess and the UI shows it dashed.
+The LLM only reads and writes language. Matching is a plain database query.
+
+1. **Screen.** A cheap keyword pass plus a moderation check for banned topics and money talk.
+2. **Extract.** One call to a small, fast model with a strict output schema: the five facets, with `activity` restricted to the tag list (or `unknown` plus the words it heard), and a confidence per field.
+3. **Resolve in code.** Relative times ("next Thursday after work") are turned into real time slots by code using the user's timezone, not by the model. Suburbs are looked up in a gazetteer. Unknown activity words go through an embedding lookup ("pickle" → pickleball), and anything still unmatched goes to a tag review queue.
+4. **Show guesses.** Low-confidence fields appear as dashed nodes the user can fix with one tap. Missing required fields are asked for.
+5. **Store.** The ask is saved with edges to its activity, suburb and time slots.
+
+While typing, a rule-based pass (like `engine.js` here) gives an instant preview, and the model runs on pause or submit.
+
+For the MVP, Postgres is enough for "the graph": tag columns for activity, PostGIS for distance, `tstzrange` overlap for time, and pgvector for fuzzy tags. A graph database is only worth it later for social-graph questions ("people who've played with people you've played with").
 
 ### Matching
 
@@ -80,12 +93,49 @@ Each facet that matches becomes a "reason" chip on the card and an edge in the m
 
 **Learning from experience** (post-MVP): ratings feed back into ranking. People you rated well, and who rated you well, rank higher next time. Activities you actually turn up to get more weight than ones you only list.
 
+## Onboarding agent
+
+New members don't fill in forms. They talk to an agent, by voice or text, that asks one thing at a time:
+
+1. First name
+2. What they like doing or want to try
+3. How they rate themselves at each ("pretty decent", "7 out of 10")
+4. Home suburb and how far they'd travel
+5. Age (only used to keep Keen 18+ and for optional age matching, never shown)
+6. What they want from Keen: get fitter, make friends, learn something, compete, get outdoors, unwind
+7. Anything to avoid: water sports, heights, alcohol, contact sports, late nights, early starts, big groups (private)
+8. When they're usually free
+
+The profile card above the chat fills in live and is the source of truth: every fact is visible and removable. Under-18s are stopped. Surname, phone, email and address are never asked.
+
+The avoid list filters everything Keen suggests. "No alcohol" hides plans at licensed venues, "scared of heights" hides bouldering, and so on. The feed says how many plans were hidden and lets you show them.
+
+**How it's built.** The agent has one tool, `update_profile`, whose fields are the fixed tag lists (activities, levels, suburbs, goals, avoids, availability), so it can't invent values. Each user turn, the model calls the tool with only the new facts, then speaks one short reply. The page decides what's still missing and passes `next_topic` back.
+
+- **In this prototype:** on the published claude.ai page, the agent is Claude through the page's `sample` capability (on the viewer's own account, after they allow it). Opened from the repo, or if Claude isn't allowed, a scripted agent in `agent.js` asks the same questions with rule-based extraction. Voice uses the browser's speech recognition and speech synthesis where allowed. The claude.ai viewer blocks the microphone, so there you type, tap a reply, or use the keyboard's mic.
+- **In the app:** streaming speech-to-text, then the same agent and tool, then text-to-speech, with barge-in so people can interrupt. Audio isn't stored, only the facts on the card.
+
+## Posting and listing plans
+
+You can browse events but never people. A plan is an ask made specific: a fixed start time, a public venue and spots to fill.
+
+- **Posting.** The same ask box detects organiser phrasing (a fixed time, a named venue, "we're 4", "I've booked a court") and offers **Post as a plan** first. The compose screen asks for day, start time, duration, venue (from a list of public places, with licensed ones marked), spots, level, a note and whether you approve joins.
+- **Who it reaches,** shown before posting:
+  1. People with a matching open ask are told immediately.
+  2. People who might be keen hear about it within their 3-a-week cap.
+  3. It appears in **Happening near you** for people within their travel radius.
+- **The feed** is ranked by interest match (0.4), how soon (0.2), level fit (0.15), how close to full (0.15) and the organiser's Goodwill (0.1). Tabs: For you, All nearby, This weekend.
+- **Join requests** show the person's Goodwill, events and no-shows. Organisers accept or decline, and a declined person just sees "this plan is full".
+- **Rules.** Notes are screened like chat (no contact details, no payment talk). Plans over 6 people need ID or 100+ Goodwill.
+- **Later:** verified clubs and venues posting their open sessions, linking out to their own booking.
+
 ## Profiles and privacy
 
 | Shown | Never shown |
 | --- | --- |
 | First name, photo | Surname |
 | Suburb, rounded distance | Phone, email |
+| | Age and avoid list (private, used only for filtering) |
 | Interests and level | Address, live location |
 | Goodwill, events attended, rating, no-shows | Age, employer |
 | Verification badges | The documents behind them |
@@ -132,9 +182,9 @@ Later: share-my-plan with a trusted contact, check-in at the venue, and age veri
 
 ## MVP scope
 
-**In:** ask box and parser, editable intent graph, matching (asks, plans, might-be-keen reach-out), suggested plans, limited profiles, invite and join requests, plan page with group chat and contact masking, feedback, Goodwill, report and block, saved asks with reach-out stats, "run it again".
+**In:** onboarding conversation (voice and text), ask box and parser, editable intent graph, posting plans, the "Happening near you" feed with private avoid filters, join approvals, matching (asks, plans, might-be-keen reach-out), suggested plans, limited profiles, invite and join requests, plan page with group chat and contact masking, feedback, Goodwill, report and block, saved asks with reach-out stats, "run it again".
 
-**Out (for now):** login and onboarding (assume phone sign-in), calendar sync, payments, paid services and home help, 1:1 messaging, a recommendations feed, location tracking, check-ins.
+**Out (for now):** login (assume phone sign-in), photo and ID checks, calendar sync, payments, paid services and home help, 1:1 messaging, location tracking, check-ins, club and venue accounts.
 
 ## Open questions
 
@@ -151,14 +201,18 @@ Later: share-my-plan with a trusted contact, check-in at the venue, and age veri
 demo-activity-matching/
 ├── index.html   # Page shell: phone frame and notes column
 ├── styles.css   # Tokens (light and dark) and components
-├── data.js      # Activity tags, suburbs, mock people, asks, plans
-├── engine.js    # parseIntent, match, screenMessage, Goodwill levels (pure, runs in Node too)
-├── app.js       # Screens, navigation, sheets, design notes
+├── data.js        # Activity tags, avoids, goals, venues, suburbs, mock people, asks, plans
+├── engine.js      # parseIntent, match, rankFeed, screenMessage, Goodwill levels (pure, runs in Node too)
+├── agent.js       # Onboarding agent: topics, extraction, scripted replies, Claude prompt and tool schema (pure)
+├── app.js         # Core screens, navigation, sheets, design notes
+├── plans.js       # Feed, posting a plan, join requests
+├── onboarding.js  # Onboarding screen, Claude and voice wiring
 └── README.md
 ```
 
-`engine.js` has no DOM code. You can try the parser from Node:
+`engine.js` and `agent.js` have no DOM code. You can try them from Node:
 
 ```
 node -e "const e=require('./engine.js'); console.log(e.parseIntent('football friday manly looking for 7'))"
+node -e "const a=require('./agent.js'), p=a.emptyProfile(); for (const t of ['Sam','padel, pretty decent','Manly 5km']) console.log(a.scriptedTurn(p,t).reply)"
 ```

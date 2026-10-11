@@ -8,7 +8,7 @@ if (typeof module !== 'undefined') {
 
 const ACT = Object.fromEntries(ACTIVITIES.map((a) => [a.id, a]));
 const PLACE = Object.fromEntries(PLACES.map((p) => [p.name, p]));
-const PERSON = Object.fromEntries([ME, ...PEOPLE].map((p) => [p.id, p]));
+const PERSON = Object.fromEntries([ME, ...PEOPLE, ...FRIENDS].map((p) => [p.id, p]));
 const SKILLS = ['beginner', 'casual', 'intermediate', 'competitive'];
 const DEFAULT_RADIUS_KM = 5;
 
@@ -63,7 +63,10 @@ function resolveWhen([day, from, to], now = new Date()) {
   let d;
   if (/^[+-]\d+$/.test(day)) d = addDays(startOfDay(now), +day);
   else if (day.startsWith('-')) d = addDays(nextDow(now, DOW_ABBR[day.slice(1)]), -7);
-  else d = nextDow(now, DOW_ABBR[day]);
+  else {
+    d = nextDow(now, DOW_ABBR[day]);
+    if (at(d, to) <= now) d = addDays(d, 7); // today's session is already over: next week's
+  }
   return [{ start: at(d, from), end: at(d, to) }];
 }
 
@@ -95,7 +98,7 @@ function to24(h, m, suffix) {
 function parseTime(text, now = new Date()) {
   let t = text;
   const today = startOfDay(now);
-  let days = null, dayLabel = null, recurring = false;
+  let days = null, dayLabel = null, recurring = false, byWeekday = false;
 
   // dd/mm dates, optionally a range (Australian order)
   const dm = t.match(/\b(\d{1,2})\/(\d{1,2})(?:\s*(?:-|–|to)\s*(\d{1,2})\/(\d{1,2}))?\b/);
@@ -129,13 +132,14 @@ function parseTime(text, now = new Date()) {
         const dow = DOW.indexOf(m[1]) >= 0 ? DOW.indexOf(m[1]) : DOW_ABBR[m[1]];
         recurring = !!m[2];
         days = [nextDow(now, dow)];
-        dayLabel = recurring ? `${cap(DOW[dow])}s` : fmtDay(days[0], now);
+        byWeekday = true;
+        dayLabel = recurring ? `${cap(DOW[dow])}s` : null;
       }
     }
   }
 
   // hours: explicit range, single time, or part of day
-  let from = null, to = null, hourLabel = null;
+  let from = null, to = null, hourLabel = null, exact = false;
   const range = t.match(/\b(from |between )?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:-|–|to|till|until|and)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\b/);
   if (range && (range[1] || range[3] || range[4] || range[6] || range[7])) {
     const endSuffix = range[7], startSuffix = range[4] || (endSuffix && +range[2] <= +range[5] ? endSuffix : null);
@@ -146,7 +150,7 @@ function parseTime(text, now = new Date()) {
     const single = t.match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/) || t.match(/\b(\d{1,2}):(\d{2})\b/);
     if (single) { from = to24(single[1], single[2], single[3]); to = from + 2; }
   }
-  if (from != null) hourLabel = fmtRange(from, to);
+  if (from != null) { hourLabel = fmtRange(from, to); exact = true; }
   else {
     const part = PARTS.find((p) => p.re.test(t));
     if (part) { from = part.from; to = part.to; hourLabel = part.label; }
@@ -165,10 +169,13 @@ function parseTime(text, now = new Date()) {
     }
   }
   if (from == null) { from = 7; to = 21; hourLabel = days.length === 1 ? 'any time' : null; }
+  // "Sunday 8am" said on Sunday evening means next Sunday
+  if (byWeekday && at(days[0], to) <= now) days = [addDays(days[0], 7)];
+  if (byWeekday && !dayLabel) dayLabel = fmtDay(days[0], now);
 
   const slots = days.map((d) => ({ start: at(d, from), end: at(d, to) })).filter((s) => s.end > now);
   const label = [dayLabel, hourLabel].filter(Boolean).join(' · ');
-  return { slots: slots.length ? slots : days.map((d) => ({ start: at(d, from), end: at(d, to) })), label, assumed, recurring };
+  return { slots: slots.length ? slots : days.map((d) => ({ start: at(d, from), end: at(d, to) })), label, assumed, recurring, exact, from, to };
 }
 
 function parseParty(t, act) {
@@ -231,7 +238,12 @@ function parseIntent(raw, home = ME.suburb, now = new Date()) {
   if (!activity) missing.push('what');
   if (time.assumed) missing.push('when');
 
-  return { raw, activity, place, time, party, skill, role, flags, missing };
+  // Does this read like someone organising an event rather than looking for one?
+  const venue = VENUES.find((v) => wordRe(v.name.toLowerCase().split(',')[0]).test(t)) || null;
+  const organiser = /\b(organis|organiz|i'm running|im running|we're running|hosting|i've booked|we've booked|booked a|got a court|have a court|my team|our team)/.test(t);
+  const eventLike = organiser || !!venue || (party.have > 1 && time.exact) || (time.exact && !party.assumed);
+
+  return { raw, activity, place, time, party, skill, role, flags, missing, venue, organiser, eventLike };
 }
 
 // ---------- matching ----------
@@ -334,6 +346,61 @@ function match(intent, opts = {}) {
   return { people: people.filter((x) => !joined.has(x.person.id)), plans, passive, suggestion };
 }
 
+// ---------- the "Happening near you" feed ----------
+
+// What a plan involves, for checking against someone's private avoid list.
+function planTraits(plan, now = new Date()) {
+  const t = new Set(ACT[plan.act].traits || []);
+  if (plan.alcohol) t.add('alcohol');
+  const slot = plan.slots ? plan.slots[0] : resolveWhen(plan.when, now)[0];
+  const h = (d) => d.getHours() + d.getMinutes() / 60;
+  if (h(slot.end) >= 22 || h(slot.end) < 4) t.add('late');
+  if (h(slot.start) < 7) t.add('early');
+  if (plan.size >= 8) t.add('big');
+  return [...t];
+}
+
+// Rank open plans for a profile. Avoided plans are held back, not deleted, so the UI can say how many.
+function rankFeed(profile, plans, opts = {}) {
+  const now = opts.now || new Date();
+  const home = PLACE[profile.suburb] || PLACE[ME.suburb];
+  const radius = profile.radius || 10;
+  const shown = [], hidden = [];
+  for (const plan of plans) {
+    if (plan.past || plan.members.includes('me')) continue;
+    const slot = plan.slots ? plan.slots[0] : resolveWhen(plan.when, now)[0];
+    if (slot.end < now) continue;
+    const dist = km(home, PLACE[plan.place] || home);
+    if (dist > radius) continue;
+    const act = ACT[plan.act];
+    const into = profile.interests.includes(plan.act);
+    const near = !into && profile.interests.some((i) => ACT[i].cat === act.cat);
+    const interest = into ? 1 : near ? 0.5 : 0.1;
+    const days = (slot.start - now) / 864e5;
+    const soon = Math.max(0, 1 - days / 7);
+    const left = plan.size - plan.members.length;
+    const momentum = left <= 0 ? 0 : 1 - left / plan.size;
+    const trust = Math.min(1, (PERSON[plan.org] ? PERSON[plan.org].points : 0) / 1500);
+    let levelFit = 1;
+    const mine = profile.levels && profile.levels[plan.act];
+    if (mine && plan.skill) levelFit = [1, 0.8, 0.5, 0.3][Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(plan.skill))];
+    const score = 0.4 * interest + 0.2 * soon + 0.15 * momentum + 0.1 * trust + 0.15 * levelFit;
+
+    const reasons = [];
+    if (into) reasons.push({ ok: true, text: `You're into ${act.label.toLowerCase()}` });
+    else if (near) reasons.push({ ok: false, text: `Like ${profile.interests.filter((i) => ACT[i].cat === act.cat).map((i) => ACT[i].label.toLowerCase())[0]}` });
+    reasons.push({ ok: true, text: dist < 0.8 ? `In ${plan.place}` : `${dist.toFixed(1)} km` });
+    if (left > 0 && left <= 2) reasons.push({ ok: true, text: `${left} spot${left === 1 ? '' : 's'} left` });
+    if (mine && plan.skill && levelFit < 0.8) reasons.push({ ok: false, text: `${cap(plan.skill)} level` });
+
+    const clash = planTraits(plan, now).filter((tr) => (profile.avoid || []).includes(tr));
+    const item = { plan, slot, dist, score, reasons, into, near, left, clash };
+    (clash.length ? hidden : shown).push(item);
+  }
+  shown.sort((a, b) => b.score - a.score);
+  return { shown, hidden };
+}
+
 // Screen chat messages for things scammers rely on: moving off-app and talking about money.
 const CHAT_PATTERNS = [
   { re: /(?:\+?61|\b0)[\s-]?4(?:[\s-]?\d){8}\b/g, label: 'phone number' },
@@ -361,5 +428,5 @@ const levelFor = (pts) => [...LEVELS].reverse().find((l) => pts >= l.min);
 const nextLevel = (pts) => LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { parseIntent, parseTime, match, scoreFit, screenMessage, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { wordRe, cap, SKILLS, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

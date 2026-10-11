@@ -14,6 +14,7 @@ const EXAMPLES = [
   'Show me around Mosman next weekend',
   'Board games in Newtown tonight',
   'Fix my sink this weekend',
+  "Football Friday 6pm at Manly Oval, we're 4, need 7",
 ];
 
 const S = {
@@ -39,12 +40,17 @@ const S = {
   ],
   feedbackDone: false,
   fb: null,
+  onboarding: true,
+  ob: null,
+  feedTab: 'foryou',
+  showHidden: false,
+  draft: null,
   chat: Object.fromEntries(Object.entries(SEED_CHAT).map(([k, v]) => [k, v.map((m) => ({ ...m }))])),
 };
 
 // ---------- navigation ----------
 
-const view = () => S.stack[S.stack.length - 1] || { name: S.tab };
+const view = () => (S.onboarding ? { name: 'onboard' } : S.stack[S.stack.length - 1] || { name: S.tab });
 function go(name, v) { S.stack.push({ name, v }); render(); }
 function back() { S.stack.pop(); render(); }
 function setTab(tab) { S.tab = tab; S.stack = []; render(); }
@@ -94,6 +100,7 @@ function currentIntent() {
   if (o.when) { it.time = parseTime(' ' + o.when.toLowerCase() + ' ', NOW); it.time.assumed = false; it.missing = it.missing.filter((m) => m !== 'when'); }
   if (o.party) it.party = { ...o.party, assumed: false };
   if ('skill' in o) it.skill = o.skill;
+  else if (!it.skill && it.activity && ME.levels && ME.levels[it.activity.id]) { it.skill = ME.levels[it.activity.id]; it.skillFromProfile = true; }
   return it;
 }
 
@@ -106,7 +113,7 @@ function facetList(it, empty) {
     { key: 'where', k: 'Where', v: placeText(it.place), state: S.over.place || S.over.radius ? 'edited' : it.place.assumed ? 'assumed' : '', pos: [75, 40] },
     { key: 'when', k: 'When', v: it.time.label, state: S.over.when ? 'edited' : it.time.assumed ? 'missing' : '', pos: [72, 84] },
     { key: 'who', k: 'Group', v: partyText(it.party), state: S.over.party ? 'edited' : it.party.assumed ? 'assumed' : '', pos: [28, 84] },
-    { key: 'level', k: 'Level', v: (it.skill ? cap(it.skill) : 'Any level') + role, state: 'skill' in S.over ? 'edited' : it.skill ? '' : 'assumed', pos: [25, 40] },
+    { key: 'level', k: 'Level', v: (it.skill ? cap(it.skill) : 'Any level') + role, state: 'skill' in S.over ? 'edited' : it.skillFromProfile ? 'profile' : it.skill ? '' : 'assumed', pos: [25, 40] },
   ].map((f) => (empty ? { ...f, v: '?', state: 'missing' } : f));
 }
 
@@ -114,7 +121,7 @@ function graphHTML(it, empty) {
   const fs = facetList(it, empty);
   const c = [50, 56];
   const lines = fs.map((f) => `<line class="ln ${f.state === 'missing' ? 'missing' : f.state === 'assumed' ? 'assumed' : ''}" x1="${c[0]}" y1="${c[1]}" x2="${f.pos[0]}" y2="${f.pos[1]}"/>`).join('');
-  const nodes = fs.map((f) => `<button type="button" class="node ${f.state}" data-act="facet" data-v="${f.key}" style="left:${f.pos[0]}%;top:${f.pos[1]}%" aria-label="${f.k}: ${esc(f.v)}. Tap to change."><span class="k">${f.k}${f.state === 'assumed' ? ' · guess' : f.state === 'edited' ? ' · edited' : ''}</span><span class="v">${esc(f.v)}</span></button>`).join('');
+  const nodes = fs.map((f) => `<button type="button" class="node ${f.state}" data-act="facet" data-v="${f.key}" style="left:${f.pos[0]}%;top:${f.pos[1]}%" aria-label="${f.k}: ${esc(f.v)}. Tap to change."><span class="k">${f.k}${f.state === 'assumed' ? ' · guess' : f.state === 'edited' ? ' · edited' : f.state === 'profile' ? ' · profile' : ''}</span><span class="v">${esc(f.v)}</span></button>`).join('');
   const centre = `<span class="node center" style="left:${c[0]}%;top:${c[1]}%">${it.party.have > 1 && !empty ? `You + ${it.party.have - 1}` : 'You'}</span>`;
   return `<div class="igraph" aria-label="Your ask as a graph"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">${lines}</svg>${centre}${nodes}</div>`;
 }
@@ -129,20 +136,23 @@ function flagsHTML(it) {
 
 function previewHTML() {
   const empty = !S.text.trim() && !S.over.act;
+  if (empty) {
+    return `<div class="try-row" aria-label="Example asks">${EXAMPLES.map((e, i) => `<button type="button" class="example" data-act="example" data-v="${i}">${esc(e)}</button>`).join('')}</div>${feedHTML()}`;
+  }
   const it = currentIntent();
   let h = graphHTML(it, empty);
   h += `<div class="graph-legend"><span><i></i>understood</span><span><i class="d"></i>guess or missing</span><span>Tap any node to fix it</span></div>`;
-  if (empty) {
-    h += `<div class="examples"><p class="eyebrow">Try one</p>${EXAMPLES.map((e, i) => `<button type="button" class="example" data-act="example" data-v="${i}">${esc(e)}</button>`).join('')}</div>`;
-    return h;
-  }
   h += flagsHTML(it);
   if (!it.activity) h += `<div class="notice info"><b>What do you want to do?</b>We didn't catch an activity. Tap <em>What</em> to pick one, or add it to your ask.</div>`;
   if (it.missing.includes('when')) {
     h += `<div class="when-quick"><p class="eyebrow">When suits you?</p><div class="chips">${['Tonight', 'Tomorrow morning', 'This weekend', 'Weeknights'].map((w) => `<button type="button" class="chip" data-act="set-when" data-v="${w}">${w}</button>`).join('')}</div></div>`;
   }
   const ok = it.activity && !it.flags.length;
-  h += `<button type="button" class="btn block" data-act="find" ${ok ? '' : 'disabled'}>${it.missing.includes('when') ? 'Find people in the next 7 days' : 'Find people'}</button>`;
+  const organising = ok && it.eventLike;
+  const findBtn = `<button type="button" class="btn ${organising ? 'ghost' : ''}" data-act="find" ${ok ? '' : 'disabled'}>${it.missing.includes('when') ? 'Find people this week' : 'Find people'}</button>`;
+  const postBtn = `<button type="button" class="btn ${organising ? '' : 'ghost'}" data-act="compose" ${ok ? '' : 'disabled'}>Post as a plan</button>`;
+  if (organising) h += `<div class="notice info"><b>Sounds like you're organising</b>Post it as a plan with a time and a public venue. We tell the people who fit, and it shows in their feed.</div>`;
+  h += `<div class="btn-pair">${organising ? postBtn + findBtn : findBtn + postBtn}</div>`;
   return h;
 }
 
@@ -274,7 +284,7 @@ VIEWS.results = () => {
       <p class="small muted" style="margin:0">${n === 1 ? 'person lists' : 'people list'} ${esc(it.activity.label.toLowerCase())} within ${it.place.radius} km but hasn't asked. We don't show who; we pass your ask on.</p>
       <label class="toggle" style="grid-column:1/-1;margin-top:6px"><input type="checkbox" id="reachOut" data-act="reach" ${S.reachOut ? 'checked' : ''}>Send my ask to them</label></div>`;
   }
-  h += `</div><div class="sticky-cta"><button type="button" class="btn block" data-act="save-ask">${any ? 'Save ask and notify me' : 'Save my ask'}</button></div>`;
+  h += `</div><div class="sticky-cta"><button type="button" class="btn block" data-act="save-ask">${any ? 'Save ask and notify me' : 'Save my ask'}</button><button type="button" class="link-btn" data-act="compose-from-results" style="justify-self:center">Post it as a plan instead</button></div>`;
   return h;
 };
 
@@ -326,7 +336,7 @@ VIEWS.plan = ({ v: id }) => {
       <button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>
       <p class="small muted" style="margin:0;text-align:center">Sends the same plan to the ${g.members.length - 1} people who came.</p>`;
   } else if (g.mine) {
-    cta = `<div class="card"><p class="eyebrow">Your plan so far</p>${funnelHTML(g)}<p class="small muted" style="margin:0">It goes ahead when enough people say yes. Everyone gets a reminder 2 hours before.</p></div>`;
+    cta = `${requestsHTML(g)}<div class="card"><p class="eyebrow">Your plan so far</p>${funnelHTML(g)}<p class="small muted" style="margin:0">${g.posted ? `Sent to ${plural(g.sent, 'person')} who fit, and showing in "Happening near you" within ${ME.radius || 10} km.` : 'It goes ahead when enough people say yes.'} Everyone gets a reminder 2 hours before.</p></div>`;
   } else {
     cta = `<button type="button" class="btn block ${asked ? 'done' : ''}" data-act="join" data-v="${id}" ${asked ? 'disabled' : ''}>${asked ? `Requested · ${esc(org.name)} will confirm` : 'Ask to join'}</button>`;
   }
@@ -334,7 +344,7 @@ VIEWS.plan = ({ v: id }) => {
     <div><p class="eyebrow">${esc(ACT[g.act].label)}${g.past ? ' · finished' : g.mine ? ' · proposed by you' : ' · open group'}</p><h1 class="h1">${esc(g.title)}</h1></div>
     <div class="meta">
       <div><span class="k">When</span><span>${esc(fmtSlot(slot, NOW))}</span></div>
-      <div><span class="k">Where</span><span>${esc(g.venue)}<br><span class="muted small">${esc(g.place)} · public venue</span></span></div>
+      <div><span class="k">Where</span><span>${esc(g.venue)}<br><span class="muted small">${esc(g.place)} · public venue${g.alcohol ? ' · licensed' : ''}</span></span></div>
       <div><span class="k">Level</span><span>${cap(g.skill)}</span></div>
       <div><span class="k">Spots</span><span class="row">${spots(g.members.length, g.size)}<span class="small muted num">${g.past ? `${g.members.length} came` : `${left} left`}</span></span></div>
     </div>
@@ -435,7 +445,8 @@ VIEWS.me = () => {
   const lvl = levelFor(S.points), nx = nextLevel(S.points);
   const pct = nx ? ((S.points - lvl.min) / (nx.min - lvl.min)) * 100 : 100;
   const byGroup = {};
-  ME.interests.forEach((a) => { (byGroup[ACT[a].group] ||= []).push(ACT[a].label); });
+  ME.interests.forEach((a) => { (byGroup[ACT[a].group] ||= []).push(ACT[a].label + (ME.levels && ME.levels[a] ? ` · ${LEVEL_LABEL[ME.levels[a]]}` : '')); });
+  const labelOf = (list, id) => (list.find((x) => x.id === id) || {}).label;
   return bar('Me', false) + `<div class="pad">
     <div class="row">${avatar(ME)}<div class="grow"><div class="h3">${ME.name}</div><div class="small muted">${ME.suburb} · ${plural(ME.events, 'event')} · ★ ${ME.rating}</div></div></div>
     <div class="gw-hero">
@@ -456,7 +467,17 @@ VIEWS.me = () => {
     <div class="card"><div class="h3">Trust</div><div class="badges" style="justify-content:flex-start"><span class="badge">Phone verified</span><span class="badge">Real photo</span>${S.idVerified ? '<span class="badge">ID verified</span>' : '<span class="badge off">ID not verified</span>'}</div>
       ${S.idVerified ? '' : '<button type="button" class="btn sm sea" data-act="verify" style="justify-self:start">Verify ID · +100</button>'}
       <p class="small muted" style="margin:0">Under 100 Goodwill you can join plans but can send only 3 invites a day. Organising plans for more than 6 people needs ID.</p></div>
-    <div><h3 class="h3">Your interests</h3>${Object.entries(byGroup).map(([g, xs]) => `<p class="small muted" style="margin:6px 0 4px">${g}</p><div class="chips">${xs.map((x) => `<span class="chip">${x}</span>`).join('')}</div>`).join('')}</div>
+    <div><h3 class="h3">Your interests</h3>${Object.entries(byGroup).map(([g, xs]) => `<p class="small muted" style="margin:6px 0 4px">${g}</p><div class="chips">${xs.map((x) => `<span class="chip">${x}</span>`).join('')}</div>`).join('')}
+      ${ME.goals && ME.goals.length ? `<p class="small muted" style="margin:10px 0 4px">Here to</p><div class="chips">${ME.goals.map((g) => `<span class="chip">${labelOf(GOALS, g)}</span>`).join('')}</div>` : ''}</div>
+    <div class="card"><div class="row"><div class="h3 grow">Only you see this</div><span class="lock">private</span></div>
+      <div class="meta small">
+        <div><span class="k">Age</span><span>${ME.age != null ? ME.age : 'Not given'}</span></div>
+        <div><span class="k">Avoid</span><span>${ME.avoid && ME.avoid.length ? ME.avoid.map((a) => labelOf(AVOIDS, a)).join(', ') : 'Nothing'}</span></div>
+        <div><span class="k">Free</span><span>${ME.free && ME.free.length ? ME.free.map((f) => labelOf(AVAILABILITY, f)).join(', ') : 'Not given'}</span></div>
+        <div><span class="k">Distance</span><span>Up to ${ME.radius || 10} km from ${esc(ME.suburb)}</span></div>
+      </div>
+      <p class="small muted" style="margin:0">Used to filter what Keen suggests. Never shown on your profile.</p>
+      <button type="button" class="btn sm ghost" data-act="ob-restart" style="justify-self:start">Redo the getting-to-know-you chat</button></div>
     <div class="card shown"><div><b class="small">Others see</b><ul class="muted"><li>${ME.name}, your photo</li><li>${ME.suburb}</li><li>Interests, level</li><li>Goodwill, feedback</li></ul></div><div><b class="small">Never shown</b><ul class="muted"><li>Surname</li><li>Phone, email</li><li>Address</li><li>Live location</li></ul></div></div>
   </div>`;
 };
@@ -653,7 +674,7 @@ function flash(key) {
 }
 
 function updateBadge() {
-  const n = (S.feedbackDone ? 0 : 1) + S.myAsks.filter((a) => a.keen).length;
+  const n = (S.feedbackDone ? 0 : 1) + S.myAsks.filter((a) => a.keen).length + S.myPlans.reduce((k, g) => k + (g.requests ? g.requests.length : 0), 0);
   const b = $('#planBadge');
   b.hidden = !n; b.textContent = n;
 }
@@ -665,7 +686,9 @@ function render(keepScroll = false) {
   const y = scr.scrollTop;
   const v = view();
   scr.innerHTML = VIEWS[v.name](v);
-  scr.scrollTop = keepScroll ? y : 0;
+  scr.scrollTo({ top: keepScroll ? y : 0, behavior: 'instant' });
+  $('#phone').classList.toggle('no-tabs', v.name === 'onboard');
+  if (v.name === 'onboard') obAfterRender();
   document.querySelectorAll('#tabs button').forEach((b) => {
     if (b.dataset.v === S.tab) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
@@ -691,9 +714,32 @@ function intentShape() {
 }
 
 const NOTES = {
+  onboard: {
+    title: 'Onboarding is a conversation',
+    body: `<ul>
+      <li>New members talk to an agent instead of filling in forms. It asks one thing at a time: name, what they like doing, how they rate themselves, where they are, age, what they want from Keen, what to avoid, and when they're free.</li>
+      <li>The profile card above the chat fills in as they talk. It's the source of truth: every fact is visible and removable, and nothing is saved that they can't see.</li>
+      <li>Age and the avoid list are private. They only filter suggestions ("no alcohol" hides plans at licensed venues) and never appear on the profile.</li>
+      <li>Levels are self-rated in plain words ("pretty decent", "7 out of 10") and mapped to four levels. Feedback after plans corrects them over time.</li>
+      <li>Under 18s are stopped kindly. Surname, phone, email and address are never asked for.</li>
+      <li>Quick replies under the chat mean nobody has to type on a phone.</li>
+    </ul>`,
+  },
+  compose: {
+    title: 'Posting a plan',
+    body: `<ul>
+      <li>A plan is an ask made specific: a fixed start time, a public venue and spots to fill. Typing "Football Friday 6pm at Manly Oval, we're 4, need 7" offers this flow first.</li>
+      <li>Venues come from a list of public places. Licensed venues are marked, and people who avoid alcohol never see those plans.</li>
+      <li>Before you post you see who it reaches: people with a matching ask are told now, people who might be keen hear about it within their weekly cap, and it appears in the feed for people nearby.</li>
+      <li>Notes are screened like chat. Phone numbers, links and payment talk block posting. Plans are free to join.</li>
+      <li>Organisers approve who joins by default. Plans over 6 people need ID or 100+ Goodwill.</li>
+    </ul>`,
+  },
   ask: {
     title: 'One box, no search',
     body: `<ul>
+      <li><b>Happening near you.</b> Below the box is a feed of open plans, ranked by your interests, your level, how soon they are and how close they are to filling. You can browse events. You can never browse people.</li>
+      <li>Plans that clash with your private avoid list are held back, with a count and a way to show them.</li>
       <li>People don't browse other people. They say what they want and Keen does the finding. From the notebook: <em>"We don't have search. You ask, we reach out to people that may be interested."</em></li>
       <li>The sentence becomes a small graph with five nodes: what, where, when, group, level. Activity and time are required. Place falls back to your home suburb.</li>
       <li>Every node is a tap target. When the parser gets something wrong you fix one node instead of retyping, so the UI never boxes in what someone can ask for. Dashed nodes are guesses.</li>
@@ -770,9 +816,11 @@ const NOTES = {
 };
 
 const FLOWS = [
-  ['Ask', () => { S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
+  ['Onboarding', () => obRestart(), (n) => n === 'onboard'],
+  ['Ask and feed', () => { S.onboarding = false; S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
   ['Matches', () => { S.text = EXAMPLES[0]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && (S.result.people.length || S.result.plans.length)],
   ['No match', () => { S.text = EXAMPLES[4]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && !S.result.people.length && !S.result.plans.length],
+  ['Post a plan', () => { S.text = EXAMPLES[6]; S.over = {}; S.tab = 'ask'; S.stack = []; startCompose(currentIntent()); }, (n) => n === 'compose'],
   ['Blocked ask', () => { S.text = EXAMPLES[5]; S.over = {}; setTab('ask'); }, () => false],
   ['Group plan', () => { S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
   ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
@@ -789,7 +837,8 @@ function renderNotes() {
     <h2>${n.title}</h2>
     ${n.body}
     ${name === 'ask' ? intentShape() : ''}
-    <div class="note-block"><h3>Not in this prototype</h3><p class="small muted">Login, onboarding, calendar sync, payments, home-help jobs, 1:1 messages with strangers, location tracking and check-ins. The README in this folder has the full MVP scope, data model and safety plan.</p></div>`;
+    ${name === 'onboard' ? obNotesExtra() : ''}
+    <div class="note-block"><h3>Not in this prototype</h3><p class="small muted">Login, photo checks, calendar sync, payments, home-help jobs, 1:1 messages with strangers, location tracking and check-ins. The README in this folder has the full MVP scope, data model and safety plan.</p></div>`;
 }
 
 // ---------- wiring ----------
@@ -810,6 +859,8 @@ function init() {
       if (!S.text.trim()) S.over = {};
       updatePreview();
     }
+    if (e.target.id === 'draftTitle') { S.draft.title = e.target.value; S.draft.titleEdited = true; composeLive(); }
+    if (e.target.id === 'draftNote') { S.draft.note = e.target.value; composeLive(); }
   });
   phone.addEventListener('keydown', (e) => {
     if (e.target.id === 'askInput' && e.key === 'Enter' && !e.shiftKey) {
@@ -820,6 +871,7 @@ function init() {
   });
   phone.addEventListener('submit', (e) => {
     e.preventDefault();
+    if (e.target.id === 'obForm') { obSubmit(); return; }
     const form = e.target, input = form.querySelector('input');
     const raw = input.value.trim();
     if (!raw) return;
@@ -841,9 +893,12 @@ function init() {
     if (!b) return;
     closeSheet();
     document.querySelectorAll('.toast').forEach((t) => t.remove());
+    if (+b.dataset.flow !== 0) obLeave();
     FLOWS[+b.dataset.flow][1]();
   });
+  S.ob = freshOnboarding();
+  detectClaude();
   render();
 }
 
-init();
+document.addEventListener('DOMContentLoaded', init);

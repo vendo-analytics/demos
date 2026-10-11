@@ -15,14 +15,14 @@ const ACTIVITIES = [
   { id: 'tennis', label: 'Tennis', cat: 'racquet', group: 'Sports', size: 2, words: ['tennis'] },
   { id: 'pickleball', label: 'Pickleball', cat: 'racquet', group: 'Sports', size: 4, words: ['pickleball', 'pickle ball'] },
   { id: 'squash', label: 'Squash', cat: 'racquet', group: 'Sports', size: 2, words: ['squash'] },
-  { id: 'football', label: 'Football', cat: 'team', group: 'Sports', size: 10, words: ['football', 'soccer', 'futsal', 'five a side', '5-a-side', '5 a side', '6-a-side', 'kickabout', 'kick about'] },
-  { id: 'basketball', label: 'Basketball', cat: 'team', group: 'Sports', size: 6, words: ['basketball', 'hoops'] },
+  { id: 'football', label: 'Football', cat: 'team', group: 'Sports', size: 10, words: ['football', 'soccer', 'futsal', 'five a side', '5-a-side', '5 a side', '6-a-side', 'kickabout', 'kick about'], traits: ['contact'] },
+  { id: 'basketball', label: 'Basketball', cat: 'team', group: 'Sports', size: 6, words: ['basketball', 'hoops'], traits: ['contact'] },
   { id: 'volleyball', label: 'Beach volleyball', cat: 'team', group: 'Sports', size: 4, words: ['beach volleyball', 'volleyball', 'beach volley'] },
   { id: 'running', label: 'Running', cat: 'fitness', group: 'Sports', size: 2, words: ['running', 'run', 'jog', 'jogging', 'parkrun', '5k', '10k'] },
   { id: 'cycling', label: 'Cycling', cat: 'fitness', group: 'Sports', size: 4, words: ['cycling', 'bike ride', 'road ride', 'ride', 'mtb'] },
-  { id: 'climbing', label: 'Bouldering', cat: 'fitness', group: 'Sports', size: 2, words: ['bouldering', 'climbing', 'climb'] },
-  { id: 'surfing', label: 'Surfing', cat: 'water', group: 'Sports', size: 2, words: ['surfing', 'surf'] },
-  { id: 'swimming', label: 'Ocean swim', cat: 'water', group: 'Sports', size: 4, words: ['ocean swim', 'swimming', 'swim'] },
+  { id: 'climbing', label: 'Bouldering', cat: 'fitness', group: 'Sports', size: 2, words: ['bouldering', 'climbing', 'climb'], traits: ['heights'] },
+  { id: 'surfing', label: 'Surfing', cat: 'water', group: 'Sports', size: 2, words: ['surfing', 'surf'], traits: ['water'] },
+  { id: 'swimming', label: 'Ocean swim', cat: 'water', group: 'Sports', size: 4, words: ['ocean swim', 'swimming', 'swim'], traits: ['water'] },
   { id: 'hiking', label: 'Bushwalk', cat: 'outdoors', group: 'Hobbies', size: 4, words: ['bushwalk', 'bush walk', 'hiking', 'hike', 'coastal walk', 'walk'] },
   { id: 'explore', label: 'Local tour', cat: 'local', group: 'Hobbies', size: 2, words: ['show me around', 'show us around', 'explore', 'tour'] },
   { id: 'boardgames', label: 'Board games', cat: 'games', group: 'Hobbies', size: 4, words: ['board games', 'board game', 'boardgames', 'catan'] },
@@ -52,11 +52,64 @@ const PLACES = [
   { name: 'Parramatta', lat: -33.8150, lng: 151.0010 },
 ];
 
-// The signed-in user. Login and onboarding are out of scope, so we start here.
+// Things people can ask not to be suggested. Kept private; used only to filter.
+const AVOIDS = [
+  { id: 'water', label: 'Water sports', words: ['water', 'swim', 'swimming', 'ocean', 'surf', 'surfing', 'sea', 'drown'] },
+  { id: 'heights', label: 'Heights', words: ['height', 'heights', 'climb', 'climbing', 'cliff', 'cliffs'] },
+  { id: 'alcohol', label: 'Alcohol and bars', words: ['alcohol', 'drink', 'drinks', 'drinking', 'booze', 'pub', 'pubs', 'bar', 'bars', 'sober', 'beer'] },
+  { id: 'contact', label: 'Contact sports', words: ['contact', 'tackle', 'tackling', 'rough', 'physical'] },
+  { id: 'late', label: 'Late nights', words: ['late', 'late nights', 'night', 'nights'] },
+  { id: 'early', label: 'Early starts', words: ['early', 'early mornings', 'early starts', 'sunrise'] },
+  { id: 'big', label: 'Big groups', words: ['big groups', 'big group', 'crowds', 'crowd', 'large groups'] },
+];
+
+const GOALS = [
+  { id: 'fitness', label: 'Get fitter', words: ['fit', 'fitter', 'fitness', 'healthy', 'health', 'exercise', 'in shape', 'lose weight', 'active'] },
+  { id: 'friends', label: 'Make new friends', words: ['friends', 'friend', 'people', 'social', 'meet', 'meeting', 'new to', 'community', 'lonely', 'mates'] },
+  { id: 'learn', label: 'Learn something new', words: ['learn', 'learning', 'new skill', 'try', 'trying', 'improve', 'get better', 'teach'] },
+  { id: 'compete', label: 'Compete', words: ['compete', 'competitive', 'competition', 'win', 'tournament', 'league', 'serious'] },
+  { id: 'outdoors', label: 'Get outdoors', words: ['outdoors', 'outside', 'nature', 'fresh air', 'beach', 'sun'] },
+  { id: 'unwind', label: 'Unwind', words: ['relax', 'unwind', 'stress', 'switch off', 'fun', 'chill', 'de-stress'] },
+];
+
+const AVAILABILITY = [
+  { id: 'wd-am', label: 'Weekday mornings' },
+  { id: 'wd-pm', label: 'Weekday evenings' },
+  { id: 'we-am', label: 'Weekend mornings' },
+  { id: 'we-pm', label: 'Weekend afternoons' },
+];
+
+// Public places plans can happen at. No home addresses, ever.
+const VENUES = [
+  { name: 'Manly Oval', suburb: 'Manly', acts: ['football', 'running'] },
+  { name: 'Manly padel courts', suburb: 'Manly', acts: ['padel', 'pickleball'] },
+  { name: 'Freshwater courts', suburb: 'Freshwater', acts: ['padel', 'tennis', 'pickleball'] },
+  { name: 'Balgowlah tennis centre', suburb: 'Balgowlah', acts: ['tennis', 'squash'] },
+  { name: 'South Steyne, by the lifeguard tower', suburb: 'Manly', acts: ['surfing', 'volleyball', 'swimming'] },
+  { name: 'Shelly Beach', suburb: 'Manly', acts: ['swimming', 'photowalk'] },
+  { name: 'Manly Wharf', suburb: 'Manly', acts: ['running', 'cycling', 'hiking', 'explore', 'photowalk'] },
+  { name: 'Manly Dam picnic area', suburb: 'Balgowlah', acts: ['hiking', 'cycling', 'running'] },
+  { name: 'Manly Library meeting room', suburb: 'Manly', acts: ['boardgames', 'chess', 'language'] },
+  { name: 'Corso café tables', suburb: 'Manly', acts: ['boardgames', 'chess', 'language', 'jam'] },
+  { name: 'Wharf bar (licensed)', suburb: 'Manly', acts: ['boardgames', 'jam'], alcohol: true },
+  { name: 'Dee Why beach nets', suburb: 'Dee Why', acts: ['volleyball'] },
+  { name: 'Clontarf Reserve', suburb: 'Mosman', acts: ['football', 'explore', 'hiking'] },
+];
+
+// Friends who come along with the user ("we're two"). They join plans with the user.
+const FRIENDS = [
+  { id: 'f1', name: 'Jordan', suburb: 'Manly', hue: 270, points: 410, events: 15, rating: 4.8, idVerified: true, phoneVerified: true, joined: 'Mar 2026', interests: ['padel', 'running'], skill: 'casual', noShows: 0 },
+  { id: 'f2', name: 'Priyanka', suburb: 'Manly', hue: 40, points: 220, events: 8, rating: 4.9, idVerified: false, phoneVerified: true, joined: 'May 2026', interests: ['padel', 'football'], skill: 'casual', noShows: 0 },
+  { id: 'f3', name: 'Tim', suburb: 'Balgowlah', hue: 120, points: 150, events: 6, rating: 4.7, idVerified: false, phoneVerified: true, joined: 'Jun 2026', interests: ['football'], skill: 'casual', noShows: 0 },
+];
+
+// The signed-in user. Login is out of scope; onboarding (the chat) can overwrite this sample profile.
 const ME = {
   id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, points: 640, events: 17, rating: 4.8,
   idVerified: false, phoneVerified: true, joined: 'Feb 2026', noShows: 0, skill: 'casual',
   interests: ['padel', 'surfing', 'running', 'boardgames', 'language'],
+  levels: { padel: 'casual', surfing: 'beginner', running: 'intermediate', boardgames: 'casual', language: 'beginner' },
+  radius: 10, age: 34, goals: ['friends', 'fitness'], avoid: ['alcohol'], free: ['wd-pm', 'we-am'],
 };
 
 // [id, first name, suburb, avatar hue, goodwill, events attended, rating, ID verified, joined, interests, skill, bio, no-shows]
@@ -138,6 +191,12 @@ const PLANS = [
   { id: 'g4', org: 'p30', act: 'volleyball', title: 'Bondi beach volley', place: 'Bondi', venue: 'North Bondi nets', when: ['sun', 14, 17], members: ['p30'], size: 4, skill: 'intermediate', note: 'Net is up from 2pm.' },
   { id: 'g5', org: 'p29', act: 'padel', title: 'Saturday padel ladder', place: 'Freshwater', venue: 'Freshwater courts', when: ['sat', 8, 10], members: ['p29', 'p26', 'p28'], size: 4, skill: 'casual', note: 'One spot left.' },
   { id: 'g6', org: 'p10', act: 'running', title: 'Sunrise run', place: 'Manly', venue: 'Manly Wharf', when: ['sat', 6, 7], members: ['p10', 'p22', 'p11'], size: 12, skill: 'casual', note: '6km, no one gets left behind.' },
+  { id: 'g7', org: 'p16', act: 'boardgames', title: 'Trivia and board games', place: 'Manly', venue: 'Wharf bar (licensed)', alcohol: true, when: ['+2', 19, 22], members: ['p16', 'p29', 'p27'], size: 8, skill: 'casual', note: 'Teams of four. Bring your worst general knowledge.' },
+  { id: 'g8', org: 'p10', act: 'swimming', title: 'Shelly Beach swim', place: 'Manly', venue: 'Shelly Beach', when: ['sun', 7.5, 8.5], members: ['p10', 'p4'], size: 8, skill: 'intermediate', note: 'Out to the buoy and back. Wetsuits optional.' },
+  { id: 'g9', org: 'p27', act: 'language', title: 'Spanish over coffee', place: 'Manly', venue: 'Corso café tables', when: ['wed', 7.5, 8.5], members: ['p27', 'p18'], size: 6, skill: 'beginner', note: 'Half Spanish, half English. All levels.' },
+  { id: 'g10', org: 'p15', act: 'tennis', title: 'Social doubles', place: 'Mosman', venue: 'Clontarf Reserve courts', when: ['sun', 9, 11], members: ['p15', 'p3', 'p20'], size: 4, skill: 'intermediate', note: 'One spot. We rotate partners every set.' },
+  { id: 'g11', org: 'p19', act: 'climbing', title: 'Sunset bouldering', place: 'Marrickville', venue: 'Marrickville climbing gym', when: ['thu', 18, 20.5], members: ['p19'], size: 4, skill: 'intermediate', note: 'Shoes for hire at the desk.' },
+  { id: 'g12', org: 'p22', act: 'hiking', title: 'Manly Dam loop', place: 'Balgowlah', venue: 'Manly Dam picnic area', when: ['sun', 8, 11], members: ['p22', 'p17'], size: 8, skill: 'casual', note: 'Slow pace, snack stop halfway.' },
 ];
 
 // A plan the user went to last week. It is waiting for their feedback.
@@ -164,5 +223,5 @@ const SEED_CHAT = {
 };
 
 if (typeof module !== 'undefined') {
-  module.exports = { CATEGORIES, ACTIVITIES, PLACES, ME, PEOPLE, REVIEW_BANK, OPEN_ASKS, PLANS, PAST_PLANS, MY_ASKS, SEED_CHAT };
+  module.exports = { CATEGORIES, ACTIVITIES, AVOIDS, GOALS, AVAILABILITY, VENUES, FRIENDS, PLACES, ME, PEOPLE, REVIEW_BANK, OPEN_ASKS, PLANS, PAST_PLANS, MY_ASKS, SEED_CHAT };
 }
