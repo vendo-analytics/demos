@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Keen MVP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Figtree:wght@400;500;600;700&family=Martian+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<!-- app -->
+<div class="page">
+  <header class="masthead">
+    <div class="brand">
+      <span class="flag-mark" aria-hidden="true"></span>
+      <span class="wordmark">Keen</span>
+      <span class="proto-tag">MVP prototype</span>
+    </div>
+    <p class="lede">Say what you want to do in plain English. Keen turns it into an intent graph, finds people and groups who fit, and reaches out to people who might be keen. There is no search and no browsing of strangers.</p>
+  </header>
+
+  <main class="stage">
+    <div class="phone" id="phone">
+      <div class="screen" id="screen"></div>
+      <nav class="tabs" id="tabs" aria-label="App sections">
+        <button type="button" data-act="tab" data-v="ask">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Ask
+        </button>
+        <button type="button" data-act="tab" data-v="activity">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>Plans
+          <span class="dot-badge num" id="planBadge" hidden></span>
+        </button>
+        <button type="button" data-act="tab" data-v="me">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>Me
+        </button>
+      </nav>
+      <div id="overlay"></div>
+    </div>
+
+    <aside class="notes" id="notes" aria-live="polite"></aside>
+  </main>
+</div>
+<!-- /app -->
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
