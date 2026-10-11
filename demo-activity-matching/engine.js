@@ -60,6 +60,7 @@ function km(a, b) {
 
 // Mock windows are written as [day, from, to]: 'sat', '+3' (days from today) or '-fri' (last Friday).
 function resolveWhen([day, from, to], now = new Date()) {
+  if (day === 'now') return [{ start: new Date(+now + from * 36e5), end: new Date(+now + to * 36e5) }];
   let d;
   if (/^[+-]\d+$/.test(day)) d = addDays(startOfDay(now), +day);
   else if (day.startsWith('-')) d = addDays(nextDow(now, DOW_ABBR[day.slice(1)]), -7);
@@ -120,6 +121,8 @@ function parseTime(text, now = new Date()) {
     } else if (/\bweekend\b/.test(t)) {
       const dow = today.getDay();
       days = dow === 0 ? [today] : dow === 6 ? [today, addDays(today, 1)] : [nextDow(now, 6), addDays(nextDow(now, 6), 1)];
+      // Sunday evening: this weekend is effectively over, so mean the next one
+      if (dow === 0 && now.getHours() >= 18) days = [addDays(today, 6), addDays(today, 7)];
       if (/\bnext weekend\b/.test(t) && dow !== 0 && dow !== 6) days = days.map((d) => addDays(d, 7));
       if (/\bnext weekend\b/.test(t) && (dow === 0 || dow === 6)) days = [nextDow(addDays(now, 1), 6), addDays(nextDow(addDays(now, 1), 6), 1)];
       dayLabel = /\bnext weekend\b/.test(t) ? 'Next weekend' : 'This weekend';
@@ -346,59 +349,168 @@ function match(intent, opts = {}) {
   return { people: people.filter((x) => !joined.has(x.person.id)), plans, passive, suggestion };
 }
 
-// ---------- the "Happening near you" feed ----------
+// ---------- events: the graph between people and events ----------
 
-// What a plan involves, for checking against someone's private avoid list.
+const slotOf = (g, now = new Date()) => (g.slots ? g.slots[0] : resolveWhen(g.when, now)[0]);
+const hourOf = (d) => d.getHours() + d.getMinutes() / 60;
+
+// Which of the four availability buckets a start time falls in.
+function bucketOf(date) {
+  const weekend = date.getDay() === 0 || date.getDay() === 6;
+  return (weekend ? 'we-' : 'wd-') + (hourOf(date) < 12 ? 'am' : 'pm');
+}
+
+// Where an event is in its life: before check-in opens, open for check-in, or over.
+function eventPhase(g, now = new Date()) {
+  const slot = slotOf(g, now);
+  if (now > slot.end) return 'done';
+  if (now >= new Date(+slot.start - 30 * 60e3)) return 'live';
+  return 'upcoming';
+}
+
+// What an event involves, for checking against someone's private avoid list.
 function planTraits(plan, now = new Date()) {
   const t = new Set(ACT[plan.act].traits || []);
   if (plan.alcohol) t.add('alcohol');
-  const slot = plan.slots ? plan.slots[0] : resolveWhen(plan.when, now)[0];
-  const h = (d) => d.getHours() + d.getMinutes() / 60;
-  if (h(slot.end) >= 22 || h(slot.end) < 4) t.add('late');
-  if (h(slot.start) < 7) t.add('early');
+  const slot = slotOf(plan, now);
+  if (hourOf(slot.end) >= 22 || hourOf(slot.end) < 4) t.add('late');
+  if (hourOf(slot.start) < 7) t.add('early');
   if (plan.size >= 8) t.add('big');
   return [...t];
 }
 
-// Rank open plans for a profile. Avoided plans are held back, not deleted, so the UI can say how many.
+// Edges learned from history: who you've played with, who you rated well, what you actually turn up to.
+function socialContext(history, me = 'me') {
+  const played = {}, actCount = {};
+  for (const g of history) {
+    if (!g.members.includes(me)) continue;
+    actCount[g.act] = (actCount[g.act] || 0) + 1;
+    for (const m of g.members) if (m !== me) played[m] = (played[m] || 0) + 1;
+  }
+  return { played, actCount };
+}
+
+// Score one event for one person and explain it as edges from "you" to the event.
+function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new Date()) {
+  const home = PLACE[profile.suburb] || PLACE[ME.suburb];
+  const slot = slotOf(plan, now);
+  const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
+  const dist = km(home, venue || PLACE[plan.place] || home);
+  const act = ACT[plan.act];
+  const into = profile.interests.includes(plan.act);
+  const near = !into && profile.interests.some((i) => ACT[i].cat === act.cat);
+  const times = ctx.actCount[plan.act] || 0;
+  const interest = into ? Math.min(1, 0.75 + 0.05 * times) : near ? 0.45 : 0.1;
+  const soon = Math.max(0, 1 - (slot.start - now) / 864e5 / 7);
+  const left = plan.size - plan.members.length;
+  const momentum = left <= 0 ? 0 : 1 - left / plan.size;
+  const trust = Math.min(1, ((PERSON[plan.org] || {}).points || 0) / 1500);
+  const mine = profile.levels && profile.levels[plan.act];
+  const levelFit = mine && plan.skill ? [1, 0.8, 0.5, 0.3][Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(plan.skill))] : 0.8;
+  const bucket = bucketOf(slot.start);
+  const freeFit = !profile.free || !profile.free.length ? 0.7 : profile.free.includes(bucket) ? 1 : 0.3;
+  const friends = plan.members.filter((m) => ctx.played[m]);
+  const social = Math.min(1, friends.reduce((k, m) => k + ctx.played[m], 0) / 3);
+  const score = 0.3 * interest + 0.12 * soon + 0.1 * momentum + 0.08 * trust + 0.12 * levelFit + 0.13 * freeFit + 0.15 * social;
+
+  const BUCKET_LABEL = { 'wd-am': 'weekday mornings', 'wd-pm': 'weekday evenings', 'we-am': 'weekend mornings', 'we-pm': 'weekend afternoons' };
+  const edges = [
+    { key: 'activity', node: act.label, you: into ? (times ? `you've been ${times}×` : "you're into it") : near ? 'like what you do' : 'new to you', ok: into },
+    { key: 'place', node: plan.place, you: `${dist.toFixed(1)} km from you`, ok: dist <= (profile.radius || 10) },
+    { key: 'time', node: fmtDay(slot.start, now), you: freeFit === 1 ? `free ${BUCKET_LABEL[bucket]}` : 'not your usual time', ok: freeFit === 1 },
+  ];
+  if (friends.length) edges.push({ key: 'people', node: friends.map((m) => PERSON[m].name).slice(0, 2).join(', '), you: 'played with you', ok: true });
+  if (mine && plan.skill) edges.push({ key: 'level', node: cap(plan.skill), you: `you're ${mine}`, ok: levelFit >= 0.8 });
+
+  const reasons = [];
+  if (friends.length) reasons.push({ ok: true, text: `${friends.map((m) => PERSON[m].name).slice(0, 2).join(' and ')} ${friends.length === 1 ? 'is' : 'are'} going` });
+  if (into) reasons.push({ ok: true, text: times ? `You've been to ${times} ${act.label.toLowerCase()} plan${times === 1 ? '' : 's'}` : `You're into ${act.label.toLowerCase()}` });
+  else if (near) reasons.push({ ok: false, text: `Like ${profile.interests.filter((i) => ACT[i].cat === act.cat).map((i) => ACT[i].label.toLowerCase())[0]}` });
+  reasons.push({ ok: true, text: dist < 0.8 ? `In ${plan.place}` : `${dist.toFixed(1)} km` });
+  if (freeFit === 1) reasons.push({ ok: true, text: 'Fits your free time' });
+  if (left > 0 && left <= 2) reasons.push({ ok: true, text: `${left} spot${left === 1 ? '' : 's'} left` });
+  if (mine && plan.skill && levelFit < 0.8) reasons.push({ ok: false, text: `${cap(plan.skill)} level` });
+
+  const clash = planTraits(plan, now).filter((tr) => (profile.avoid || []).includes(tr));
+  return { plan, slot, dist, score, reasons, edges, into, near, left, clash };
+}
+
+// Recommendations: open events near you, best first. Avoided ones are held back, not deleted, so the UI can say how many.
 function rankFeed(profile, plans, opts = {}) {
   const now = opts.now || new Date();
-  const home = PLACE[profile.suburb] || PLACE[ME.suburb];
+  const ctx = opts.ctx || { played: {}, actCount: {} };
   const radius = profile.radius || 10;
   const shown = [], hidden = [];
   for (const plan of plans) {
-    if (plan.past || plan.members.includes('me')) continue;
-    const slot = plan.slots ? plan.slots[0] : resolveWhen(plan.when, now)[0];
-    if (slot.end < now) continue;
-    const dist = km(home, PLACE[plan.place] || home);
-    if (dist > radius) continue;
-    const act = ACT[plan.act];
-    const into = profile.interests.includes(plan.act);
-    const near = !into && profile.interests.some((i) => ACT[i].cat === act.cat);
-    const interest = into ? 1 : near ? 0.5 : 0.1;
-    const days = (slot.start - now) / 864e5;
-    const soon = Math.max(0, 1 - days / 7);
-    const left = plan.size - plan.members.length;
-    const momentum = left <= 0 ? 0 : 1 - left / plan.size;
-    const trust = Math.min(1, (PERSON[plan.org] ? PERSON[plan.org].points : 0) / 1500);
-    let levelFit = 1;
-    const mine = profile.levels && profile.levels[plan.act];
-    if (mine && plan.skill) levelFit = [1, 0.8, 0.5, 0.3][Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(plan.skill))];
-    const score = 0.4 * interest + 0.2 * soon + 0.15 * momentum + 0.1 * trust + 0.15 * levelFit;
-
-    const reasons = [];
-    if (into) reasons.push({ ok: true, text: `You're into ${act.label.toLowerCase()}` });
-    else if (near) reasons.push({ ok: false, text: `Like ${profile.interests.filter((i) => ACT[i].cat === act.cat).map((i) => ACT[i].label.toLowerCase())[0]}` });
-    reasons.push({ ok: true, text: dist < 0.8 ? `In ${plan.place}` : `${dist.toFixed(1)} km` });
-    if (left > 0 && left <= 2) reasons.push({ ok: true, text: `${left} spot${left === 1 ? '' : 's'} left` });
-    if (mine && plan.skill && levelFit < 0.8) reasons.push({ ok: false, text: `${cap(plan.skill)} level` });
-
-    const clash = planTraits(plan, now).filter((tr) => (profile.avoid || []).includes(tr));
-    const item = { plan, slot, dist, score, reasons, into, near, left, clash };
-    (clash.length ? hidden : shown).push(item);
+    if (plan.past || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id))) continue;
+    if (eventPhase(plan, now) === 'done') continue;
+    const item = scoreEvent(profile, plan, ctx, now);
+    if (item.dist > radius) continue;
+    (item.clash.length ? hidden : shown).push(item);
   }
   shown.sort((a, b) => b.score - a.score);
   return { shown, hidden };
+}
+
+// Search events (never people). The query goes through the same parser as asks; only what the
+// person actually said becomes a filter. Without a recognised activity it falls back to words in titles and notes.
+function searchEvents(text, profile, plans, opts = {}) {
+  const now = opts.now || new Date();
+  const it = parseIntent(text || '', profile.suburb, now);
+  const f = opts.filters || {};
+  const act = f.act !== undefined ? f.act : it.activity ? it.activity.id : null;
+  const place = f.place !== undefined ? f.place : it.place.assumed ? null : it.place.remote ? null : it.place.name;
+  const radius = f.radius || (place ? it.place.radius : profile.radius || 10);
+  const time = f.time !== undefined ? f.time : it.time.assumed ? null : it.time;
+  const skill = f.skill !== undefined ? f.skill : it.skill && !it.skillFromProfile ? it.skill : null;
+  const stop = new Set(['a', 'an', 'the', 'in', 'at', 'on', 'for', 'to', 'and', 'with', 'near', 'me', 'this', 'next', 'some', 'any', 'play', 'want', 'i']);
+  const words = act ? [] : (text || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2 && !stop.has(w) && !DOW.includes(w));
+  const centre = PLACE[place || profile.suburb] || PLACE[ME.suburb];
+  const exact = [], similar = [], hidden = [];
+  for (const plan of plans) {
+    if (plan.past || eventPhase(plan, now) === 'done') continue;
+    const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
+    if (km(centre, venue || PLACE[plan.place]) > radius) continue;
+    const slot = slotOf(plan, now);
+    if (time && !time.slots.some((s) => s.start < slot.end && s.end > slot.start)) continue;
+    if (f.day != null && +startOfDay(slot.start) !== f.day) continue;
+    if (skill && plan.skill !== skill && plan.skill !== 'casual') continue;
+    let bucket = null;
+    if (act) bucket = plan.act === act ? exact : ACT[plan.act].cat === ACT[act].cat ? similar : null;
+    else if (words.length) {
+      const hay = `${plan.title} ${plan.note || ''} ${ACT[plan.act].label} ${plan.venue}`.toLowerCase();
+      bucket = words.some((w) => hay.includes(w)) ? exact : null;
+    } else bucket = exact;
+    if (!bucket) continue;
+    const item = scoreEvent(profile, plan, opts.ctx, now);
+    (item.clash.length ? hidden : bucket).push(item);
+  }
+  const byScore = (a, b) => b.score - a.score;
+  return { intent: it, filters: { act, place, radius, time, skill, words }, exact: exact.sort(byScore), similar: similar.sort(byScore), hidden };
+}
+
+// Browse: how many open events per activity and per day for the next week.
+function browseIndex(profile, plans, now = new Date()) {
+  const byAct = {}, byDay = {};
+  const home = PLACE[profile.suburb] || PLACE[ME.suburb];
+  for (const plan of plans) {
+    if (plan.past || eventPhase(plan, now) === 'done') continue;
+    const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
+    if (km(home, venue || PLACE[plan.place]) > (profile.radius || 10)) continue;
+    byAct[plan.act] = (byAct[plan.act] || 0) + 1;
+    const d = +startOfDay(slotOf(plan, now).start);
+    byDay[d] = (byDay[d] || 0) + 1;
+  }
+  return { byAct, byDay };
+}
+
+// Directions links. Coordinates go to the maps app; nothing about the person is sent.
+function mapsLinks(v) {
+  const q = `${v.lat},${v.lng}`;
+  return {
+    google: `https://www.google.com/maps/dir/?api=1&destination=${q}`,
+    apple: `https://maps.apple.com/?daddr=${q}&q=${encodeURIComponent(v.name)}`,
+  };
 }
 
 // Screen chat messages for things scammers rely on: moving off-app and talking about money.
@@ -428,5 +540,5 @@ const levelFor = (pts) => [...LEVELS].reverse().find((l) => pts >= l.min);
 const nextLevel = (pts) => LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { wordRe, cap, SKILLS, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

@@ -26,7 +26,11 @@ const S = {
   result: null,
   reachOut: true,
   invited: new Set(),
-  requested: new Set(),
+  mem: {}, // my membership per event: interested | requested | waitlist | going | checked_in | attended | left
+  read: {}, // messages read per thread
+  replyTo: null,
+  rc: null,
+  ex: { q: '', act: null, day: null, drop: {} },
   hidden: new Set(),
   myAsks: MY_ASKS.map((a) => ({ ...a })),
   myPlans: [],
@@ -42,7 +46,6 @@ const S = {
   fb: null,
   onboarding: true,
   ob: null,
-  feedTab: 'foryou',
   showHidden: false,
   draft: null,
   chat: Object.fromEntries(Object.entries(SEED_CHAT).map(([k, v]) => [k, v.map((m) => ({ ...m }))])),
@@ -229,13 +232,13 @@ function personCard(x) {
 }
 
 function planCard(x) {
-  const g = x.plan, org = PERSON[g.org], asked = S.requested.has(g.id);
+  const g = x.plan, org = PERSON[g.org], asked = !!myStatus(g);
   return `<article class="card tap" data-act="plan" data-v="${g.id}">
     <div class="row"><div class="grow"><p class="eyebrow">${esc(ACT[g.act].label)} · group</p><div class="h3">${esc(g.title)}</div><div class="muted small">${esc(g.venue)}</div></div></div>
     <div class="row">${spots(g.members.length, g.size)}<span class="small muted num">${g.members.length}/${g.size}</span></div>
     ${reasonsHTML(x.fit.reasons)}
     <div class="foot"><span class="row small">${avatar(org, 's')}<span>Run by ${esc(org.name)} ${gw(org.points)}</span></span>
-      <button type="button" class="btn sm ${asked ? 'done' : 'sea'}" data-act="join" data-v="${g.id}" ${asked ? 'disabled' : ''}>${asked ? 'Requested' : 'Ask to join'}</button></div>
+      <button type="button" class="btn sm ${asked ? 'done' : 'sea'}" data-act="join" data-v="${g.id}" ${asked ? 'disabled' : ''}>${asked ? STATUS_LABEL[myStatus(g)] : g.approve ? 'Ask to join' : 'Join'}</button></div>
   </article>`;
 }
 
@@ -288,6 +291,17 @@ VIEWS.results = () => {
   return h;
 };
 
+// Another member's activity on Keen: counts per activity, never where or when.
+function onKeenHTML(p) {
+  const w = [0.5, 0.3, 0.2, 0.1];
+  const total = w.slice(0, p.interests.length).reduce((a, b) => a + b, 0);
+  const counts = p.interests.map((a, i) => [a, Math.max(1, Math.round((p.events * w[i]) / total))]);
+  const together = ctxNow().played[p.id] || 0;
+  return `<div class="card"><div class="row"><div class="h3 grow">On Keen</div>${together ? `<span class="status ok">Played with you ${together}×</span>` : ''}</div>
+    <div class="chips">${counts.map(([a, n]) => `<span class="chip">${esc(ACT[a].label)} <span class="num muted">${n}</span></span>`).join('')}</div>
+    <p class="small muted" style="margin:0">${plural(p.events, 'plan')} attended${p.noShows ? `, ${plural(p.noShows, 'no-show')}` : ', no no-shows'}. History shows counts only, never where or when.</p></div>`;
+}
+
 VIEWS.person = ({ v: id }) => {
   const p = PERSON[id];
   const ask = OPEN_ASKS.find((a) => a.who === id);
@@ -308,6 +322,7 @@ VIEWS.person = ({ v: id }) => {
     ${p.bio ? `<p class="quote" style="text-align:center">${esc(p.bio)}</p>` : ''}
     ${ask ? `<div class="card"><p class="eyebrow">Their open ask</p><p class="quote">${esc(ask.text)}</p>${fit ? reasonsHTML(fit.fit.reasons) : ''}</div>` : ''}
     <div><h3 class="h3">Into</h3>${Object.entries(byGroup).map(([g, xs]) => `<p class="small muted" style="margin:6px 0 4px">${g}</p><div class="chips">${xs.map((x) => `<span class="chip">${x}</span>`).join('')}</div>`).join('')}</div>
+    ${onKeenHTML(p)}
     <div><h3 class="h3">What people say</h3><div style="display:grid;gap:10px;margin-top:8px">${reviews.map((rv, i) => {
       const by = reviewers[hashIdx(id + i, reviewers.length)];
       return `<div class="review"><span class="small">${esc(rv.text)}</span><span class="small muted">${esc(by.name)} · ${rv.tags.join(', ')}</span></div>`;
@@ -318,54 +333,6 @@ VIEWS.person = ({ v: id }) => {
     <button type="button" class="link-btn" data-act="report" data-v="${id}" style="justify-self:center;color:var(--flag)">Report or block ${esc(p.name)}</button>
   </div>`;
 };
-
-function findPlan(id) { return PLANS.find((g) => g.id === id) || PAST_PLANS.find((g) => g.id === id) || S.myPlans.find((g) => g.id === id); }
-
-VIEWS.plan = ({ v: id }) => {
-  const g = findPlan(id);
-  const org = PERSON[g.org];
-  const slot = g.slots ? g.slots[0] : resolveWhen(g.when, NOW)[0];
-  const asked = S.requested.has(id);
-  const inside = asked || g.past || g.mine;
-  const members = g.members.map((m) => PERSON[m]);
-  const left = g.size - g.members.length;
-  const msgs = S.chat[id] || [];
-  let cta = '';
-  if (g.past) {
-    cta = `${!S.feedbackDone ? `<button type="button" class="btn block" data-act="feedback" data-v="${id}">Rate this plan</button>` : ''}
-      <button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>
-      <p class="small muted" style="margin:0;text-align:center">Sends the same plan to the ${g.members.length - 1} people who came.</p>`;
-  } else if (g.mine) {
-    cta = `${requestsHTML(g)}<div class="card"><p class="eyebrow">Your plan so far</p>${funnelHTML(g)}<p class="small muted" style="margin:0">${g.posted ? `Sent to ${plural(g.sent, 'person')} who fit, and showing in "Happening near you" within ${ME.radius || 10} km.` : 'It goes ahead when enough people say yes.'} Everyone gets a reminder 2 hours before.</p></div>`;
-  } else {
-    cta = `<button type="button" class="btn block ${asked ? 'done' : ''}" data-act="join" data-v="${id}" ${asked ? 'disabled' : ''}>${asked ? `Requested · ${esc(org.name)} will confirm` : 'Ask to join'}</button>`;
-  }
-  return bar(esc(g.title)) + `<div class="pad">
-    <div><p class="eyebrow">${esc(ACT[g.act].label)}${g.past ? ' · finished' : g.mine ? ' · proposed by you' : ' · open group'}</p><h1 class="h1">${esc(g.title)}</h1></div>
-    <div class="meta">
-      <div><span class="k">When</span><span>${esc(fmtSlot(slot, NOW))}</span></div>
-      <div><span class="k">Where</span><span>${esc(g.venue)}<br><span class="muted small">${esc(g.place)} · public venue${g.alcohol ? ' · licensed' : ''}</span></span></div>
-      <div><span class="k">Level</span><span>${cap(g.skill)}</span></div>
-      <div><span class="k">Spots</span><span class="row">${spots(g.members.length, g.size)}<span class="small muted num">${g.past ? `${g.members.length} came` : `${left} left`}</span></span></div>
-    </div>
-    ${g.note ? `<p class="quote">${esc(g.note)}</p>` : ''}
-    ${cta}
-    <div><h3 class="h3">${g.past ? 'Who came' : "Who's in"}</h3><div style="margin-top:4px">${members.map((m) => `
-      <div class="member" ${m.id !== 'me' ? `data-act="person" data-v="${m.id}" style="cursor:pointer"` : ''}>${avatar(m, 's')}<div class="grow" style="flex:1;min-width:0"><b>${esc(m.id === 'me' ? 'You' : m.name)}</b>${m.id === g.org ? ' <span class="small muted">organiser</span>' : ''}<div class="small muted">★ ${m.rating} · ${plural(m.events, 'event')}</div></div>${gw(personPts(m))}</div>`).join('')}</div></div>
-    <div class="notice info"><b>Safe by default</b>Public venue only. Chat stays in Keen. Phone numbers, emails, links and payment talk are hidden until you've met once.</div>
-    <div><h3 class="h3">Group chat</h3><p class="small muted" style="margin:2px 0 8px">Everyone in the plan sees this. There are no private messages with people you haven't met.</p>
-      <div class="chat" id="chat">${msgs.map(msgHTML).join('') || '<p class="small muted">No messages yet.</p>'}</div></div>
-    ${inside ? `<form class="chat-form" data-plan="${id}" id="chatForm"><input id="chatInput" autocomplete="off" placeholder="Message the group (try a phone number)" aria-label="Message"><button class="btn sm sea" type="submit">Send</button></form>`
-      : `<p class="small muted" style="text-align:center;margin:0">Ask to join to chat with the group.</p>`}
-    <button type="button" class="link-btn" data-act="report" data-v="${g.org}" style="justify-self:center;color:var(--flag)">Report this plan</button>
-  </div>`;
-};
-
-function msgHTML(m) {
-  if (m.sys) return `<div class="msg sys">${esc(m.text)}</div>`;
-  const p = PERSON[m.who];
-  return `<div class="msg ${m.who === 'me' ? 'mine' : ''}"><small>${m.who === 'me' ? 'You' : esc(p.name)}</small>${esc(m.text)}</div>`;
-}
 
 function funnelHTML(a) {
   const max = Math.max(1, a.sent);
@@ -384,33 +351,6 @@ VIEWS.myask = ({ v: id }) => {
     <button type="button" class="btn block ghost" data-act="edit-ask" data-v="${id}">Edit and search again</button>
     <button type="button" class="link-btn" data-act="close-ask" data-v="${id}" style="justify-self:center">Close this ask</button>
   </div>`;
-};
-
-VIEWS.activity = () => {
-  const past = PAST_PLANS[0];
-  const upcoming = [...S.myPlans, ...PLANS.filter((g) => S.requested.has(g.id))];
-  let h = bar('Plans', false) + '<div class="pad">';
-  if (!S.feedbackDone) {
-    h += `<article class="card tap" data-act="feedback" data-v="${past.id}">
-      <div class="row"><div class="grow"><p class="eyebrow">Needs your feedback</p><div class="h3">${esc(past.title)}</div><div class="muted small">${esc(fmtSlot(resolveWhen(past.when, NOW)[0], NOW))} · ${esc(past.venue)}</div></div><span class="status due">Due</span></div>
-      <div class="foot"><span class="stack">${past.members.filter((m) => m !== 'me').map((m) => avatar(PERSON[m], 's')).join('')}</span><span class="btn sm">Rate · +20</span></div></article>`;
-  }
-  h += `<div class="section-h"><h3 class="h3">Your asks</h3><span class="small muted num">${S.myAsks.length}</span></div>`;
-  h += S.myAsks.length ? S.myAsks.map((a) => `
-    <article class="card tap" data-act="myask" data-v="${a.id}">
-      <div class="row"><div class="grow"><div class="name">${esc(a.text)}</div><div class="muted small">${esc(a.summary)}</div></div><span class="status ${a.keen ? 'ok' : 'wait'}">${a.keen ? `${a.keen} keen` : 'Waiting'}</span></div>
-      <div class="small muted num">Sent ${a.sent} · Seen ${a.seen} · Keen ${a.keen} · Passed ${a.passed}</div>
-    </article>`).join('') : '<p class="small muted">No open asks. Head to Ask to start one.</p>';
-  h += `<div class="section-h"><h3 class="h3">Upcoming</h3><span class="small muted num">${upcoming.length}</span></div>`;
-  h += upcoming.length ? upcoming.map((g) => `
-    <article class="card tap" data-act="plan" data-v="${g.id}">
-      <div class="row"><div class="grow"><div class="name">${esc(g.title)}</div><div class="muted small">${esc(fmtSlot(g.slots ? g.slots[0] : resolveWhen(g.when, NOW)[0], NOW))} · ${esc(g.venue)}</div></div>
-      <span class="status wait">${g.mine ? 'Organiser' : 'Requested'}</span></div>
-      <div class="row">${spots(g.members.length, g.size)}</div>
-    </article>`).join('') : '<p class="small muted">Nothing booked. Join a group or propose a plan from your matches.</p>';
-  h += `<div class="section-h"><h3 class="h3">Past</h3></div>
-    <article class="card tap" data-act="plan" data-v="${past.id}"><div class="row"><div class="grow"><div class="name">${esc(past.title)}</div><div class="muted small">${esc(past.venue)} · ${past.members.length} came</div></div><span class="status ${S.feedbackDone ? 'ok' : 'due'}">${S.feedbackDone ? 'Rated' : 'Rate'}</span></div></article>`;
-  return h + '</div>';
 };
 
 const GOOD_TAGS = ['On time', 'Friendly', 'Good sport', 'Skill as described', 'Would play again'];
@@ -441,6 +381,14 @@ VIEWS.feedback = ({ v: id }) => {
   </div>`;
 };
 
+function aboutMeHTML() {
+  const f = FEEDBACK_ABOUT_ME;
+  const max = Math.max(...Object.values(f.tags));
+  return `<div class="card"><div class="row"><div class="h3 grow">What people say about you</div><span class="small muted num">★ ${f.stars} · ${plural(f.reviews, 'review')}</span></div>
+    <div class="funnel tags">${Object.entries(f.tags).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<div><span>${esc(t)}</span><span class="track"><span class="fill" style="display:block;width:${(n / max) * 100}%"></span></span><span class="num">${n}</span></div>`).join('')}</div>
+    <p class="small muted" style="margin:0">Only positive tags show here and on your profile. Anything negative goes to Keen's review team, not to you or others.</p></div>`;
+}
+
 VIEWS.me = () => {
   const lvl = levelFor(S.points), nx = nextLevel(S.points);
   const pct = nx ? ((S.points - lvl.min) / (nx.min - lvl.min)) * 100 : 100;
@@ -455,7 +403,10 @@ VIEWS.me = () => {
       <div class="gw-bar"><div style="width:${pct}%"></div></div>
       <span class="small muted">${nx ? `${fmtPts(nx.min - S.points)} to ${nx.name}` : 'Top level'}</span>
     </div>
-    <div class="card"><div class="h3">Recent</div><div class="ledger">${S.ledger.slice(0, 6).map((l) => `<div><span>${esc(l.text)}</span><span class="${l.pts > 0 ? 'plus' : 'minus'}">${l.pts > 0 ? '+' : ''}${l.pts}</span></div>`).join('')}</div></div>
+    ${aboutMeHTML()}
+    <div class="card"><div class="row"><div class="h3 grow">History</div><button type="button" class="link-btn" data-act="history">See all ${historyItems().length}</button></div>
+      <div>${historyItems().slice(0, 3).map(historyRowHTML).join('')}</div></div>
+    <div class="card"><div class="h3">Recent Goodwill</div><div class="ledger">${S.ledger.slice(0, 6).map((l) => `<div><span>${esc(l.text)}</span><span class="${l.pts > 0 ? 'plus' : 'minus'}">${l.pts > 0 ? '+' : ''}${l.pts}</span></div>`).join('')}</div></div>
     <div class="card"><div class="h3">How Goodwill works</div><div class="ledger">
       <div><span>Turn up, confirmed by someone who was there</span><span class="plus">+50</span></div>
       <div><span>Organise a plan that goes ahead (3+ people)</span><span class="plus">+100</span></div>
@@ -605,12 +556,6 @@ const ACTIONS = {
     toast(`Invite sent to ${PERSON[v].name}. You can chat once they accept.`);
     render();
   },
-  join: (v) => {
-    S.requested.add(v);
-    const g = findPlan(v);
-    toast(`Request sent. ${PERSON[g.org].name} confirms new players.`);
-    updateBadge(); render();
-  },
   propose: () => {
     const it = S.intent, sg = S.result.suggestion;
     const id = 'mine' + (S.myPlans.length + 1);
@@ -644,7 +589,15 @@ const ACTIONS = {
   'fb-tag': (v) => { const i = v.indexOf(':'); const p = v.slice(0, i), tg = v.slice(i + 1); const t = S.fb.people[p].tags; t.includes(tg) ? t.splice(t.indexOf(tg), 1) : t.push(tg); render(true); },
   'fb-submit': () => {
     S.feedbackDone = true;
+    PAST_PLANS[0].rated = S.fb.stars;
     addPoints(20, 'Left feedback: Friday 6-a-side');
+    setTimeout(() => {
+      FEEDBACK_ABOUT_ME.reviews += 1;
+      ['On time', 'Good sport'].forEach((t) => { FEEDBACK_ABOUT_ME.tags[t] += 1; });
+      addPoints(10, 'Good review from Ben: On time, Good sport');
+      if (view().name === 'me') render(true);
+      toast('Ben said you were on time and a good sport. +10 Goodwill.');
+    }, 8000);
     setTimeout(() => { addPoints(50, 'Attended Friday 6-a-side, confirmed by Luca'); if (view().name === 'me') render(); toast('Luca confirmed you came: +50 Goodwill'); }, 4000);
     S.fb = null; S.stack = []; S.tab = 'activity';
     updateBadge(); render();
@@ -674,7 +627,7 @@ function flash(key) {
 }
 
 function updateBadge() {
-  const n = (S.feedbackDone ? 0 : 1) + S.myAsks.filter((a) => a.keen).length + S.myPlans.reduce((k, g) => k + (g.requests ? g.requests.length : 0), 0);
+  const n = needsYou().length + S.myAsks.filter((a) => a.keen).length + threadsList().reduce((k, t) => k + unread(t.g.id), 0);
   const b = $('#planBadge');
   b.hidden = !n; b.textContent = n;
 }
@@ -686,7 +639,7 @@ function render(keepScroll = false) {
   const y = scr.scrollTop;
   const v = view();
   scr.innerHTML = VIEWS[v.name](v);
-  scr.scrollTo({ top: keepScroll ? y : 0, behavior: 'instant' });
+  scr.scrollTo({ top: keepScroll ? y : v.name === 'thread' ? scr.scrollHeight : 0, behavior: 'instant' });
   $('#phone').classList.toggle('no-tabs', v.name === 'onboard');
   if (v.name === 'onboard') obAfterRender();
   document.querySelectorAll('#tabs button').forEach((b) => {
@@ -714,6 +667,52 @@ function intentShape() {
 }
 
 const NOTES = {
+  explore: {
+    title: 'Browse and recommendations',
+    body: `<ul>
+      <li><b>For you</b> ranks open plans by how you connect to them in the graph: activities you list and actually turn up to, distance, whether it fits your free time, your level, people you've played with who are going, how close it is to filling, and the organiser's Goodwill.</li>
+      <li>Plans that clash with your private avoid list are held back, with a count and a way to show them.</li>
+      <li><b>Browse by day</b> and <b>by activity</b> show counts within your travel radius, so empty categories are visible instead of hidden.</li>
+      <li>You can browse and search events. You can never browse or search people.</li>
+    </ul>`,
+  },
+  search: {
+    title: 'Search is the ask parser',
+    body: `<ul>
+      <li>The search box uses the same plain-English parser as the ask box. "padel this weekend" becomes an activity filter and a time filter, shown as chips you can remove.</li>
+      <li>Only what you actually typed becomes a filter. Your profile level and home suburb are used for ranking, not to narrow results.</li>
+      <li>Words that aren't a known activity fall back to matching titles and descriptions ("photo", "trivia").</li>
+      <li>Similar activities appear in their own section (tennis when you search pickleball).</li>
+      <li>No results is never a dead end: post the plan yourself or save it as an ask.</li>
+    </ul>`,
+  },
+  thread: {
+    title: 'One thread per plan',
+    body: `<ul>
+      <li>Every plan has one message thread. You're in it as soon as you say you're interested, ask to join or join. You leave it when you leave the plan.</li>
+      <li>The organiser's pinned card keeps the time, venue and meeting point at the top.</li>
+      <li>Everyone in the thread sees every message. There are no private messages with people you haven't met.</li>
+      <li>Phone numbers, emails, links, other apps and payment talk are hidden until people have met once. Try typing a number.</li>
+      <li>Reply to a specific message to keep questions and answers together. In this demo the organiser answers common questions about where to meet, parking and what to bring.</li>
+    </ul>`,
+  },
+  rollcall: {
+    title: 'Marking attendance',
+    body: `<ul>
+      <li>Attendance is what Goodwill is built on, so it needs two sides: people check in when they arrive, and the organiser or another attendee confirms.</li>
+      <li>The organiser's roll call shows who checked in. Confirming it gives everyone who came +50, and the organiser +100 if 3 or more came.</li>
+      <li>A no-show only costs Goodwill when a second person reports it too, so one grudge can't hurt anyone.</li>
+      <li>Plans without a roll call 24 hours after the end fall back to check-ins confirmed by any other attendee.</li>
+    </ul>`,
+  },
+  history: {
+    title: 'History',
+    body: `<ul>
+      <li>Every plan you went to or hosted, newest first, with the rating you gave and anything still due.</li>
+      <li>History builds the graph: activities you actually turn up to rank higher than ones you only list, and people you've played with show up in "who's going".</li>
+      <li>Other people see only your counts per activity, never where or when. A full history would show someone's routine.</li>
+    </ul>`,
+  },
   onboard: {
     title: 'Onboarding is a conversation',
     body: `<ul>
@@ -726,8 +725,10 @@ const NOTES = {
     </ul>`,
   },
   compose: {
-    title: 'Posting a plan',
+    title: 'Creating a plan',
     body: `<ul>
+      <li>Start from an ask ("Post as a plan"), from Explore or from the Plans tab. Starting fresh asks for the activity first.</li>
+      <li><b>Directions</b>: picking a venue fills in the meeting point and how to get there (transport and parking), and both can be edited. The address links to a map.</li>
       <li>A plan is an ask made specific: a fixed start time, a public venue and spots to fill. Typing "Football Friday 6pm at Manly Oval, we're 4, need 7" offers this flow first.</li>
       <li>Venues come from a list of public places. Licensed venues are marked, and people who avoid alcohol never see those plans.</li>
       <li>Before you post you see who it reaches: people with a matching ask are told now, people who might be keen hear about it within their weekly cap, and it appears in the feed for people nearby.</li>
@@ -769,13 +770,13 @@ const NOTES = {
     </ul>`,
   },
   plan: {
-    title: 'A plan is an ask with people in it',
+    title: 'The event page',
     body: `<ul>
-      <li>An ask and a plan are the same object: activity, place, time, how many you have, how many you need. When asks merge they become a plan.</li>
-      <li>Venues are public places. There are no home addresses in the MVP.</li>
-      <li>The organiser confirms join requests, so a plan can't be flooded.</li>
-      <li>Chat is group-only. Phone numbers, emails, links, other apps and payment talk are hidden until you've met once. Try typing a phone number.</li>
-      <li>From the notebook: after the plan, everyone rates it, and <em>Run it again</em> resends it to everyone who came.</li>
+      <li><b>Interested</b> puts you in the thread to ask questions, without taking a spot. <b>Join</b> takes a spot straight away, or asks the organiser if they confirm new people. Full plans have a waitlist.</li>
+      <li><b>Directions</b>: venue, address and travel tips for everyone, with links to Google and Apple Maps. The exact meeting point only shows to people in the thread.</li>
+      <li><b>Why you're seeing this</b> draws the graph path from you to the plan: activity, place, time, level and people you've played with.</li>
+      <li>On the day: check in when you arrive, or tell the group you're running late. Leaving within 24 hours counts as a late cancel.</li>
+      <li>Afterwards: rate it, see who came, and "Run it again".</li>
     </ul>`,
   },
   myask: {
@@ -789,7 +790,9 @@ const NOTES = {
   activity: {
     title: 'Plans inbox',
     body: `<ul>
-      <li>One list for everything you organise, are invited to, have asked to join or have finished, matching the notebook's task list.</li>
+      <li><b>Needs you</b> collects anything waiting on you: check in, take attendance, review join requests, rate a plan.</li>
+      <li>Going, interested and hosting in one list, with each thread's unread count, matching the notebook's task list (organiser, invited, accepted, declined).</li>
+      <li><b>Messages</b> lists every plan thread you're in, newest first.</li>
       <li>Feedback is due right after a plan ends. It's what earns Goodwill and keeps the trust numbers honest.</li>
       <li>A saved ask is live: in this demo, replies start arriving a few seconds after you save one.</li>
     </ul>`,
@@ -817,20 +820,25 @@ const NOTES = {
 
 const FLOWS = [
   ['Onboarding', () => obRestart(), (n) => n === 'onboard'],
-  ['Ask and feed', () => { S.onboarding = false; S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
+  ['Ask', () => { S.onboarding = false; S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
   ['Matches', () => { S.text = EXAMPLES[0]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && (S.result.people.length || S.result.plans.length)],
   ['No match', () => { S.text = EXAMPLES[4]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && !S.result.people.length && !S.result.plans.length],
-  ['Post a plan', () => { S.text = EXAMPLES[6]; S.over = {}; S.tab = 'ask'; S.stack = []; startCompose(currentIntent()); }, (n) => n === 'compose'],
-  ['Blocked ask', () => { S.text = EXAMPLES[5]; S.over = {}; setTab('ask'); }, () => false],
-  ['Group plan', () => { S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
-  ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
+  ['Explore', () => { S.ex = { q: '', act: null, day: null, drop: {} }; setTab('explore'); }, (n) => n === 'explore' && !searching()],
+  ['Search', () => { S.ex = { q: 'padel this weekend', act: null, day: null, drop: {} }; setTab('explore'); }, (n) => n === 'explore' && searching()],
+  ['Event page', () => { S.tab = 'explore'; S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
+  ['Thread', () => { if (!myStatus(findPlan('g1'))) ACTIONS.interest('g1'); S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'g1' }, { name: 'thread', v: 'g1' }]; render(); }, (n) => n === 'thread'],
+  ['Create event', () => { S.tab = 'activity'; S.stack = []; startComposeBlank(); }, (n) => n === 'compose'],
+  ['Check-in', () => { S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'live1' }]; render(); }, () => false],
+  ['Roll call', () => { S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'h0' }]; if (findPlan('h0').needsRollcall) S.stack.push({ name: 'rollcall', v: 'h0' }); render(); }, (n) => n === 'rollcall'],
   ['Feedback', () => { S.fb = null; S.tab = 'activity'; S.stack = [{ name: 'feedback', v: 'past1' }]; render(); }, (n) => n === 'feedback'],
-  ['Goodwill', () => setTab('me'), (n) => n === 'me'],
+  ['History', () => { S.tab = 'me'; S.stack = [{ name: 'history' }]; render(); }, (n) => n === 'history'],
+  ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
+  ['Me', () => setTab('me'), (n) => n === 'me'],
 ];
 
 function renderNotes() {
   const name = view().name;
-  const n = NOTES[name] || NOTES.ask;
+  const n = (name === 'explore' && searching() ? NOTES.search : NOTES[name]) || NOTES.ask;
   $('#notes').innerHTML = `
     <div><p class="eyebrow" style="margin-bottom:8px">Jump to</p><div class="flow">${FLOWS.map(([label, , cur], i) => `<button type="button" data-flow="${i}" aria-current="${!!cur(name)}">${label}</button>`).join('')}</div></div>
     <p class="eyebrow">Design notes · this screen</p>
@@ -859,10 +867,15 @@ function init() {
       if (!S.text.trim()) S.over = {};
       updatePreview();
     }
+    if (e.target.id === 'exInput') { S.ex.q = e.target.value; S.ex.drop = {}; updateExplore(); }
     if (e.target.id === 'draftTitle') { S.draft.title = e.target.value; S.draft.titleEdited = true; composeLive(); }
+    if (e.target.id === 'draftMeet') { S.draft.meet = e.target.value; S.draft.meetEdited = true; composeLive(); }
+    if (e.target.id === 'draftDir') { S.draft.directions = e.target.value; S.draft.dirEdited = true; composeLive(); }
+    if (e.target.id === 'draftBring') { S.draft.bring = e.target.value; composeLive(); }
     if (e.target.id === 'draftNote') { S.draft.note = e.target.value; composeLive(); }
   });
   phone.addEventListener('keydown', (e) => {
+    if (e.target.id === 'exInput' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
     if (e.target.id === 'askInput' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       const it = currentIntent();
@@ -872,17 +885,12 @@ function init() {
   phone.addEventListener('submit', (e) => {
     e.preventDefault();
     if (e.target.id === 'obForm') { obSubmit(); return; }
-    const form = e.target, input = form.querySelector('input');
-    const raw = input.value.trim();
-    if (!raw) return;
-    const id = form.dataset.plan;
-    const { text, hits } = screenMessage(raw);
-    (S.chat[id] ||= []).push({ who: 'me', text });
-    if (hits.length) S.chat[id].push({ sys: true, text: `Keen hid the ${hits.join(', ')}. Contact details unlock after you've met in a plan together. Never pay anyone you met here.` });
-    render(true);
-    const chat = $('#chat');
-    if (chat) chat.lastElementChild.scrollIntoView({ block: 'nearest' });
-    $('#chatInput')?.focus();
+    if (e.target.id === 'threadForm') {
+      const input = $('#threadInput');
+      const raw = input.value.trim();
+      if (raw) threadSend(e.target.dataset.plan, raw);
+      $('#threadInput')?.focus();
+    }
   });
   $('#screen').addEventListener('scroll', (e) => {
     const b = e.target.querySelector('.bar');
@@ -896,6 +904,12 @@ function init() {
     if (+b.dataset.flow !== 0) obLeave();
     FLOWS[+b.dataset.flow][1]();
   });
+  // Seed state from the mock data: my memberships, message times, what's already read.
+  for (const g of [...PLANS, ...PAST_PLANS, ...HISTORY]) if (g.members.includes('me') && g.org !== 'me') S.mem[g.id] = g.past ? 'attended' : 'going';
+  for (const [id, msgs] of Object.entries(S.chat)) {
+    msgs.forEach((m) => { m.at = new Date(+NOW - (m.ago || 0) * 60e3); });
+    S.read[id] = msgs.length - (id === 'live1' ? 1 : 0);
+  }
   S.ob = freshOnboarding();
   detectClaude();
   render();

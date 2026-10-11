@@ -6,6 +6,10 @@ Keen turns that into a small graph, finds people and groups who fit, and reaches
 
 "Keen" is a working name ("who's keen for padel?"). Everything in the demo data is invented.
 
+**Spec:** [`MODEL.md`](MODEL.md) has the profile and event data models, the graph, search, browse, recommendations
+and the rules for creating, joining, attendance, leaving, feedback, history and message threads.
+[`schema.sql`](schema.sql) is the Postgres schema with the core queries.
+
 Open `index.html` in a browser. There's no build step. The right-hand column has design notes for the
 current screen and "Jump to" buttons for each flow. The app opens on onboarding; tap **Skip** to use the sample profile.
 
@@ -14,16 +18,19 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Flow | What to try |
 | --- | --- |
 | Onboarding | Chat with the agent (talk, type or tap quick replies). Watch the profile card fill in. Remove anything with ×. |
-| Ask and feed | With the box empty, browse "Happening near you". Plans that clash with your avoid list are hidden, with a count. |
-| Post a plan | "Football Friday 6pm at Manly Oval, we're 4, need 7". Pick time and venue, see who it reaches, post. Join requests arrive a few seconds later. |
-| Ask | Type anything, or tap an example. Watch the graph fill in. Tap a node to correct it. |
+| Ask | Type anything, or tap an example. Watch the graph fill in, and tap a node to correct it. "Picked for you" sits under the box. |
 | Matches | Groups to join, people keen right now, a suggested plan that combines individuals, and the "might be keen" reach-out. |
 | No match | "Board games in Newtown tonight": the ask is saved and passed on, with a "widen radius" option. |
-| Blocked ask | "Fix my sink this weekend", or anything about money or sex. |
-| Profile | What other people can and can't see. Report and block. |
-| Group plan | Join request, members, safety notice, group chat. Type a phone number into the chat to see it hidden. |
-| Feedback | Rate the plan, confirm who came, tag people. Earns Goodwill. |
-| Goodwill | Points, levels, how to earn them, trust badges. |
+| Explore | Recommendations with reasons, browse by day, browse by activity. Plans that clash with your avoid list are held back with a count. |
+| Search | "padel this weekend": the query becomes removable filter chips. Try "pickleball" (similar results) or "karaoke" (no results). |
+| Event page | Interested or join, directions with map links, "why you're seeing this" graph, who's going, thread preview. |
+| Thread | Ask "where do we meet?" or "what do I bring?" and the organiser answers. Reply to a message. Type a phone number to see it hidden. |
+| Create event | Activity, day, time, venue, meeting point and directions, spots, level, details, approvals, reach preview. |
+| Check-in | A plan happening now: "I'm here" or "Running late", then confirmation and +50. |
+| Roll call | The organiser marks who came on a plan they hosted. |
+| Feedback | Rate the plan, confirm who came, tag people. A good review comes back a few seconds later. |
+| History | Every plan you went to or hosted, totals by activity, and the people you've played with. |
+| Profile | Someone else's profile: counts per activity, "played with you", trust badges. |
 
 Login, photo checks and calendar sync are deliberately out of scope.
 
@@ -201,12 +208,16 @@ Later: share-my-plan with a trusted contact, check-in at the venue, and age veri
 demo-activity-matching/
 ├── index.html   # Page shell: phone frame and notes column
 ├── styles.css   # Tokens (light and dark) and components
-├── data.js        # Activity tags, avoids, goals, venues, suburbs, mock people, asks, plans
-├── engine.js      # parseIntent, match, rankFeed, screenMessage, Goodwill levels (pure, runs in Node too)
+├── data.js        # Tags, venues (with directions), suburbs, mock people, asks, events, history, threads
+├── engine.js      # Parser, matching, event scoring, search, browse, feed ranking, screening (pure, runs in Node)
 ├── agent.js       # Onboarding agent: topics, extraction, scripted replies, Claude prompt and tool schema (pure)
-├── app.js         # Core screens, navigation, sheets, design notes
-├── plans.js       # Feed, posting a plan, join requests
+├── app.js         # Core screens (ask, matches, profiles, Me), navigation, sheets, design notes
+├── plans.js       # Creating events and organiser join requests
+├── event.js       # Event page, joining and leaving, check-in, roll call, threads, Plans tab, history
+├── explore.js     # Explore: recommendations, browse and search
 ├── onboarding.js  # Onboarding screen, Claude and voice wiring
+├── MODEL.md       # Data model and lifecycle spec
+├── schema.sql     # Postgres schema
 └── README.md
 ```
 
