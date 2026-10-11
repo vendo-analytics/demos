@@ -9,7 +9,7 @@ if (typeof module !== 'undefined') {
 }
 
 const AVOID_ACK = { water: 'no water sports', heights: 'nothing high up', alcohol: 'no alcohol', contact: 'no contact sports', late: 'no late nights', early: 'no early starts', big: 'smaller groups' };
-const LEVEL_LABEL = { beginner: 'Beginner', casual: 'Social', intermediate: 'Decent', competitive: 'Competitive' };
+const LEVEL_LABEL = Object.fromEntries(SKILL_LEVELS.map((l) => [l.id, l.label]));
 
 function emptyProfile() {
   return { name: null, activities: [], suburb: null, radius: null, age: null, ageSkipped: false, goals: [], avoid: [], avoidDone: false, free: [], freeDone: false };
@@ -39,7 +39,7 @@ function progress(p) {
 function quickReplies(topic, p) {
   if (topic === 'name') return [];
   if (topic === 'activities') return ['Padel and running', 'Football', 'Surfing, but I\'m new', 'Board games', 'Bushwalks and photography'];
-  if (topic.startsWith('level:')) return ['Never tried it', 'Beginner', 'Social', 'Pretty decent', 'Competitive'];
+  if (topic.startsWith('level:')) return ['Never tried it', 'Beginner', 'Casual', 'Intermediate', 'Competitive'];
   if (topic === 'area') return ['Manly, up to 5 km', 'Mosman, 10 km', 'Bondi', 'Anywhere in Sydney'];
   if (topic === 'age') return ['Rather not say'];
   if (topic === 'goals') return ['Meet new people', 'Get fitter', 'Learn something new', 'Compete', 'Get outdoors'];
@@ -60,7 +60,7 @@ function question(topic, p) {
     case 'free': return 'Last one. When are you usually free?';
     case 'done': return "That's everything. Here's your profile. Change anything that's off, then you're in.";
     case 'blocked': return "Thanks for being honest. Keen is 18+ for now, so I can't set up a profile yet. We'd love to have you when you're 18.";
-    default: return `How would you rate yourself at ${act.label.toLowerCase()}? Never tried, beginner, social, decent or competitive.`;
+    default: return `How would you rate yourself at ${act.label.toLowerCase()}? Beginner, casual, intermediate or competitive. Plain words are fine too.`;
   }
 }
 

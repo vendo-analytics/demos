@@ -404,7 +404,7 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   const soon = Math.max(0, 1 - (slot.start - now) / 864e5 / 7);
   const left = plan.size - plan.members.length;
   const momentum = left <= 0 ? 0 : 1 - left / plan.size;
-  const trust = Math.min(1, ((PERSON[plan.org] || {}).points || 0) / 1500);
+  const trust = Math.min(1, ((PERSON[plan.org] || {}).points || 0) / 3000);
   const mine = profile.levels && profile.levels[plan.act];
   const levelFit = mine && plan.skill ? [1, 0.8, 0.5, 0.3][Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(plan.skill))] : 0.8;
   const bucket = bucketOf(slot.start);
@@ -530,15 +530,16 @@ function screenMessage(text) {
   return { text: out, hits: [...hits] };
 }
 
-const LEVELS = [
+// Goodwill levels. Thresholds assume roughly 90 points per attended plan (see GOODWILL_RULES).
+const GOODWILL_LEVELS = [
   { min: 0, name: 'New', key: 'new' },
-  { min: 100, name: 'Regular', key: 'regular' },
-  { min: 500, name: 'Trusted', key: 'trusted' },
-  { min: 1000, name: 'Local legend', key: 'legend' },
+  { min: 200, name: 'Regular', key: 'regular' },
+  { min: 1000, name: 'Trusted', key: 'trusted' },
+  { min: 3000, name: 'Local legend', key: 'legend' },
 ];
-const levelFor = (pts) => [...LEVELS].reverse().find((l) => pts >= l.min);
-const nextLevel = (pts) => LEVELS.find((l) => l.min > pts) || null;
+const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.min);
+const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

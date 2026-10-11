@@ -49,22 +49,22 @@ create type skill_level as enum ('beginner', 'casual', 'intermediate', 'competit
 
 create table users (
   id               uuid primary key default gen_random_uuid(),
-  first_name       text not null check (length(first_name) between 1 and 30),
+  first_name       text not null check (first_name ~ '^[[:alpha:]''-]+( [[:alpha:]''-]+)?$' and length(first_name) <= 30),
   photo_url        text,
-  photo_verified   boolean not null default false,
   bio              text check (length(bio) <= 160),
   home_suburb_id   text not null references suburbs(id),
   joined_at        timestamptz not null default now(),
-  goals            text[] not null default '{}',
+  goals            text[] not null default '{}' check (cardinality(goals) <= 3),
+  photo_status     text not null default 'pending' check (photo_status in ('pending', 'verified', 'rejected')),
   id_verified      boolean not null default false,
-  goodwill         int not null default 0,            -- cached sum of goodwill_ledger
+  goodwill         int not null default 0 check (goodwill >= 0),  -- cached sum of goodwill_ledger, floored at 0
   -- private
   phone_e164       text not null unique,
   birth_year       int not null check (birth_year > 1900),   -- 18+ is enforced at sign-up
-  travel_radius_km int not null default 10,
+  travel_radius_km int not null default 10 check (travel_radius_km in (2, 5, 10, 20, 50)),
   avoid            text[] not null default '{}',      -- water, heights, alcohol, contact, late, early, big
   availability     text[] not null default '{}',      -- wd-am, wd-pm, we-am, we-pm
-  max_asks_per_week int not null default 3
+  asks_per_week    int not null default 3 check (asks_per_week in (0, 1, 3, 5, 7))
 );
 
 create table user_interests (

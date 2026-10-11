@@ -34,14 +34,9 @@ const S = {
   hidden: new Set(),
   myAsks: MY_ASKS.map((a) => ({ ...a })),
   myPlans: [],
-  points: ME.points,
+  points: 0, // set from the ledger at start-up
   idVerified: false,
-  ledger: [
-    { text: 'Attended Sunrise run', pts: 50 },
-    { text: 'Left feedback: Sunrise run', pts: 20 },
-    { text: '3 good reviews from Sunday padel', pts: 30 },
-    { text: 'Organised Sunday padel, 4 came', pts: 100 },
-  ],
+  ledger: [],
   feedbackDone: false,
   fb: null,
   onboarding: true,
@@ -223,7 +218,7 @@ function matchGraphSVG(it, r) {
 function personCard(x) {
   const p = x.person, invited = S.invited.has(p.id);
   return `<article class="card tap" data-act="person" data-v="${p.id}">
-    <div class="row">${avatar(p)}<div class="grow"><div class="name">${esc(p.name)}</div><div class="muted small">${esc(p.suburb)} · ★ ${p.rating} · ${plural(p.events, 'event')}</div></div>${gw(p.points)}</div>
+    <div class="row">${avatar(p)}<div class="grow"><div class="name">${esc(p.name)}</div><div class="muted small">${esc(p.suburb)} · ${levelLabel(p.levels[x.ask.act]) || 'New to it'} · ${plural(p.events, 'plan')}</div></div>${gw(p.points)}</div>
     <p class="quote">${esc(x.ask.text)}</p>
     ${reasonsHTML(x.fit.reasons)}
     <div class="foot"><span class="stats">${x.ask.have > 1 ? `${x.ask.have} of them · ` : ''}${p.idVerified ? 'ID verified' : 'Phone verified'}</span>
@@ -291,49 +286,6 @@ VIEWS.results = () => {
   return h;
 };
 
-// Another member's activity on Keen: counts per activity, never where or when.
-function onKeenHTML(p) {
-  const w = [0.5, 0.3, 0.2, 0.1];
-  const total = w.slice(0, p.interests.length).reduce((a, b) => a + b, 0);
-  const counts = p.interests.map((a, i) => [a, Math.max(1, Math.round((p.events * w[i]) / total))]);
-  const together = ctxNow().played[p.id] || 0;
-  return `<div class="card"><div class="row"><div class="h3 grow">On Keen</div>${together ? `<span class="status ok">Played with you ${together}×</span>` : ''}</div>
-    <div class="chips">${counts.map(([a, n]) => `<span class="chip">${esc(ACT[a].label)} <span class="num muted">${n}</span></span>`).join('')}</div>
-    <p class="small muted" style="margin:0">${plural(p.events, 'plan')} attended${p.noShows ? `, ${plural(p.noShows, 'no-show')}` : ', no no-shows'}. History shows counts only, never where or when.</p></div>`;
-}
-
-VIEWS.person = ({ v: id }) => {
-  const p = PERSON[id];
-  const ask = OPEN_ASKS.find((a) => a.who === id);
-  const fit = S.result && S.result.people.find((x) => x.person.id === id);
-  const d = km(PLACE[p.suburb], PLACE[ME.suburb]);
-  const lvl = levelFor(p.points);
-  const reviews = [REVIEW_BANK[hashIdx(id, REVIEW_BANK.length)], REVIEW_BANK[hashIdx(id + 'x', REVIEW_BANK.length)]].filter((x, i, a) => a.indexOf(x) === i);
-  const reviewers = PEOPLE.filter((q) => q.id !== id);
-  const byGroup = {};
-  p.interests.forEach((a) => { (byGroup[ACT[a].group] ||= []).push(ACT[a].label); });
-  const invited = S.invited.has(id);
-  return bar(esc(p.name)) + `<div class="pad">
-    <div class="hero">${avatar(p, 'l')}<h1 class="h1">${esc(p.name)}</h1>
-      <div class="muted small">Around ${esc(p.suburb)}${d > 0.8 ? ` · about ${Math.round(d)} km away` : ''} · on Keen since ${p.joined}</div>
-      <div class="row" style="justify-content:center">${gw(p.points)}<span class="small"><b>${lvl.name}</b></span></div></div>
-    <div class="kpis"><div><b>${p.events}</b><span>events</span></div><div><b>★ ${p.rating}</b><span>avg rating</span></div><div><b>${p.noShows}</b><span>no-shows</span></div></div>
-    <div class="badges"><span class="badge">Phone verified</span>${p.idVerified ? '<span class="badge">ID verified</span>' : '<span class="badge off">ID not verified</span>'}<span class="badge">Real photo</span></div>
-    ${p.bio ? `<p class="quote" style="text-align:center">${esc(p.bio)}</p>` : ''}
-    ${ask ? `<div class="card"><p class="eyebrow">Their open ask</p><p class="quote">${esc(ask.text)}</p>${fit ? reasonsHTML(fit.fit.reasons) : ''}</div>` : ''}
-    <div><h3 class="h3">Into</h3>${Object.entries(byGroup).map(([g, xs]) => `<p class="small muted" style="margin:6px 0 4px">${g}</p><div class="chips">${xs.map((x) => `<span class="chip">${x}</span>`).join('')}</div>`).join('')}</div>
-    ${onKeenHTML(p)}
-    <div><h3 class="h3">What people say</h3><div style="display:grid;gap:10px;margin-top:8px">${reviews.map((rv, i) => {
-      const by = reviewers[hashIdx(id + i, reviewers.length)];
-      return `<div class="review"><span class="small">${esc(rv.text)}</span><span class="small muted">${esc(by.name)} · ${rv.tags.join(', ')}</span></div>`;
-    }).join('')}</div></div>
-    <div class="card shown"><div><b class="small">On ${esc(p.name)}'s profile</b><ul class="muted"><li>First name, photo</li><li>Suburb, rounded distance</li><li>Interests and level</li><li>Goodwill and feedback</li></ul></div>
-      <div><b class="small">Never shown</b><ul class="muted"><li>Surname</li><li>Phone and email</li><li>Address or live location</li><li>Age, employer</li></ul></div></div>
-    <button type="button" class="btn block ${invited ? 'done' : 'sea'}" data-act="invite" data-v="${id}" ${invited ? 'disabled' : ''}>${invited ? 'Invited to your ask' : S.intent ? 'Invite to your ask' : 'Invite to a plan'}</button>
-    <button type="button" class="link-btn" data-act="report" data-v="${id}" style="justify-self:center;color:var(--flag)">Report or block ${esc(p.name)}</button>
-  </div>`;
-};
-
 function funnelHTML(a) {
   const max = Math.max(1, a.sent);
   const rows = [['Sent', a.sent], ['Seen', a.seen], ['Keen', a.keen], ['Passed', a.passed]];
@@ -353,8 +305,8 @@ VIEWS.myask = ({ v: id }) => {
   </div>`;
 };
 
-const GOOD_TAGS = ['On time', 'Friendly', 'Good sport', 'Skill as described', 'Would play again'];
-const BAD_TAGS = ['Late', 'Rude', 'Skill not as described', 'Made me uncomfortable', 'Asked for contact details'];
+const GOOD_TAGS = POSITIVE_TAGS;
+const BAD_TAGS = NEGATIVE_TAGS;
 
 VIEWS.feedback = ({ v: id }) => {
   const g = findPlan(id);
@@ -378,58 +330,6 @@ VIEWS.feedback = ({ v: id }) => {
     </div>
     <button type="button" class="btn block" data-act="fb-submit" ${ready ? '' : 'disabled'}>${ready ? 'Send feedback · +20 Goodwill' : 'Rate the plan to send'}</button>
     <button type="button" class="link-btn" data-act="report-who" data-v="${id}" style="justify-self:center;color:var(--flag)">Something serious happened? Report privately</button>
-  </div>`;
-};
-
-function aboutMeHTML() {
-  const f = FEEDBACK_ABOUT_ME;
-  const max = Math.max(...Object.values(f.tags));
-  return `<div class="card"><div class="row"><div class="h3 grow">What people say about you</div><span class="small muted num">★ ${f.stars} · ${plural(f.reviews, 'review')}</span></div>
-    <div class="funnel tags">${Object.entries(f.tags).sort((a, b) => b[1] - a[1]).map(([t, n]) => `<div><span>${esc(t)}</span><span class="track"><span class="fill" style="display:block;width:${(n / max) * 100}%"></span></span><span class="num">${n}</span></div>`).join('')}</div>
-    <p class="small muted" style="margin:0">Only positive tags show here and on your profile. Anything negative goes to Keen's review team, not to you or others.</p></div>`;
-}
-
-VIEWS.me = () => {
-  const lvl = levelFor(S.points), nx = nextLevel(S.points);
-  const pct = nx ? ((S.points - lvl.min) / (nx.min - lvl.min)) * 100 : 100;
-  const byGroup = {};
-  ME.interests.forEach((a) => { (byGroup[ACT[a].group] ||= []).push(ACT[a].label + (ME.levels && ME.levels[a] ? ` · ${LEVEL_LABEL[ME.levels[a]]}` : '')); });
-  const labelOf = (list, id) => (list.find((x) => x.id === id) || {}).label;
-  return bar('Me', false) + `<div class="pad">
-    <div class="row">${avatar(ME)}<div class="grow"><div class="h3">${ME.name}</div><div class="small muted">${ME.suburb} · ${plural(ME.events, 'event')} · ★ ${ME.rating}</div></div></div>
-    <div class="gw-hero">
-      <p class="eyebrow muted">Goodwill</p>
-      <div class="row" style="align-items:baseline;justify-content:space-between"><span class="big" id="gwBig">${fmtPts(S.points)}</span><b>${lvl.name}</b></div>
-      <div class="gw-bar"><div style="width:${pct}%"></div></div>
-      <span class="small muted">${nx ? `${fmtPts(nx.min - S.points)} to ${nx.name}` : 'Top level'}</span>
-    </div>
-    ${aboutMeHTML()}
-    <div class="card"><div class="row"><div class="h3 grow">History</div><button type="button" class="link-btn" data-act="history">See all ${historyItems().length}</button></div>
-      <div>${historyItems().slice(0, 3).map(historyRowHTML).join('')}</div></div>
-    <div class="card"><div class="h3">Recent Goodwill</div><div class="ledger">${S.ledger.slice(0, 6).map((l) => `<div><span>${esc(l.text)}</span><span class="${l.pts > 0 ? 'plus' : 'minus'}">${l.pts > 0 ? '+' : ''}${l.pts}</span></div>`).join('')}</div></div>
-    <div class="card"><div class="h3">How Goodwill works</div><div class="ledger">
-      <div><span>Turn up, confirmed by someone who was there</span><span class="plus">+50</span></div>
-      <div><span>Organise a plan that goes ahead (3+ people)</span><span class="plus">+100</span></div>
-      <div><span>Leave feedback after a plan</span><span class="plus">+20</span></div>
-      <div><span>Good review received (max 3 per plan)</span><span class="plus">+10</span></div>
-      <div><span>Verify your ID (once)</span><span class="plus">+100</span></div>
-      <div><span>No-show, reported by 2 or more people</span><span class="minus">−150</span></div>
-    </div><p class="small muted" style="margin:0">Goodwill can't be bought, sent or spent. Points from the same small group are capped, so fake accounts can't farm each other.</p></div>
-    <div class="card"><div class="h3">Trust</div><div class="badges" style="justify-content:flex-start"><span class="badge">Phone verified</span><span class="badge">Real photo</span>${S.idVerified ? '<span class="badge">ID verified</span>' : '<span class="badge off">ID not verified</span>'}</div>
-      ${S.idVerified ? '' : '<button type="button" class="btn sm sea" data-act="verify" style="justify-self:start">Verify ID · +100</button>'}
-      <p class="small muted" style="margin:0">Under 100 Goodwill you can join plans but can send only 3 invites a day. Organising plans for more than 6 people needs ID.</p></div>
-    <div><h3 class="h3">Your interests</h3>${Object.entries(byGroup).map(([g, xs]) => `<p class="small muted" style="margin:6px 0 4px">${g}</p><div class="chips">${xs.map((x) => `<span class="chip">${x}</span>`).join('')}</div>`).join('')}
-      ${ME.goals && ME.goals.length ? `<p class="small muted" style="margin:10px 0 4px">Here to</p><div class="chips">${ME.goals.map((g) => `<span class="chip">${labelOf(GOALS, g)}</span>`).join('')}</div>` : ''}</div>
-    <div class="card"><div class="row"><div class="h3 grow">Only you see this</div><span class="lock">private</span></div>
-      <div class="meta small">
-        <div><span class="k">Age</span><span>${ME.age != null ? ME.age : 'Not given'}</span></div>
-        <div><span class="k">Avoid</span><span>${ME.avoid && ME.avoid.length ? ME.avoid.map((a) => labelOf(AVOIDS, a)).join(', ') : 'Nothing'}</span></div>
-        <div><span class="k">Free</span><span>${ME.free && ME.free.length ? ME.free.map((f) => labelOf(AVAILABILITY, f)).join(', ') : 'Not given'}</span></div>
-        <div><span class="k">Distance</span><span>Up to ${ME.radius || 10} km from ${esc(ME.suburb)}</span></div>
-      </div>
-      <p class="small muted" style="margin:0">Used to filter what Keen suggests. Never shown on your profile.</p>
-      <button type="button" class="btn sm ghost" data-act="ob-restart" style="justify-self:start">Redo the getting-to-know-you chat</button></div>
-    <div class="card shown"><div><b class="small">Others see</b><ul class="muted"><li>${ME.name}, your photo</li><li>${ME.suburb}</li><li>Interests, level</li><li>Goodwill, feedback</li></ul></div><div><b class="small">Never shown</b><ul class="muted"><li>Surname</li><li>Phone, email</li><li>Address</li><li>Live location</li></ul></div></div>
   </div>`;
 };
 
@@ -508,7 +408,7 @@ function runSearch() {
 }
 
 function addPoints(pts, text) {
-  S.points += pts;
+  S.points = Math.max(0, S.points + pts);
   S.ledger.unshift({ text, pts });
 }
 
@@ -590,10 +490,12 @@ const ACTIONS = {
   'fb-submit': () => {
     S.feedbackDone = true;
     PAST_PLANS[0].rated = S.fb.stars;
+    PAST_PLANS[0].confirmed = true;
     addPoints(20, 'Left feedback: Friday 6-a-side');
     setTimeout(() => {
       FEEDBACK_ABOUT_ME.reviews += 1;
       ['On time', 'Good sport'].forEach((t) => { FEEDBACK_ABOUT_ME.tags[t] += 1; });
+      CTX = null;
       addPoints(10, 'Good review from Ben: On time, Good sport');
       if (view().name === 'me') render(true);
       toast('Ben said you were on time and a good sport. +10 Goodwill.');
@@ -618,7 +520,7 @@ const ACTIONS = {
     toast(`Reported. You won't see ${PERSON[v].name} again.`);
     if (view().name === 'person') back(); else render();
   },
-  verify: () => { S.idVerified = true; addPoints(100, 'Verified ID'); render(); toast('ID verified: +100 Goodwill'); },
+  verify: () => { S.idVerified = true; ME.idVerified = true; addPoints(GOODWILL_RULES.idVerified, 'Verified ID'); render(true); toast('ID verified: +100 Goodwill'); },
 };
 
 function flash(key) {
@@ -733,7 +635,7 @@ const NOTES = {
       <li>Venues come from a list of public places. Licensed venues are marked, and people who avoid alcohol never see those plans.</li>
       <li>Before you post you see who it reaches: people with a matching ask are told now, people who might be keen hear about it within their weekly cap, and it appears in the feed for people nearby.</li>
       <li>Notes are screened like chat. Phone numbers, links and payment talk block posting. Plans are free to join.</li>
-      <li>Organisers approve who joins by default. Plans over 6 people need ID or 100+ Goodwill.</li>
+      <li>Organisers approve who joins by default. Plans over 6 people need ID or the Regular level (200+ Goodwill).</li>
     </ul>`,
   },
   ask: {
@@ -762,11 +664,22 @@ const NOTES = {
   person: {
     title: 'Enough to decide, nothing to stalk',
     body: `<ul>
-      <li>Shown: first name, photo, suburb, interests, level, Goodwill, events, rating, verification badges, recent feedback.</li>
-      <li>Never shown: surname, phone, email, address, exact location, age, employer.</li>
+      <li>Every profile uses the same card as yours: first name, photo, suburb, member since, verification, Goodwill, plans attended, hosted and no-shows, activities with levels and counts, goals, and positive tag counts.</li>
+      <li>People are never rated with stars. Stars belong to plans, so the only star figure on a profile is the hosting rating, shown once someone has hosted 3 plans.</li>
+      <li>Never shown: surname, phone, email, address, exact location, age, avoid list, free times, and negative feedback.</li>
       <li>Distance is measured between suburb centres and rounded, so nobody can work out where someone lives.</li>
-      <li>Feedback appears as short tagged quotes. Negative feedback is private and goes to review instead.</li>
-      <li>Report and block is one tap away on every profile and plan.</li>
+      <li>"Invite" only appears when there's something to invite them to: your ask (coming from matches) or a plan you're hosting.</li>
+    </ul>`,
+  },
+  profileData: {
+    title: 'Profile fields',
+    body: `<ul>
+      <li>This screen is the data dictionary in working form: every field on a profile, its database name, whether it's required, the allowed values, who sets it, and the current value.</li>
+      <li><b>Shown on your profile</b> (6 fields): first name, photo, home suburb, about you, activities with levels, goals.</li>
+      <li><b>Only you and Keen</b> (6): age, mobile number, travel distance, things to avoid, free times, asks per week.</li>
+      <li><b>Worked out by Keen</b> (10): member since, verification, Goodwill and its level, plans attended and hosted, hosting rating, no-shows, positive tags, plans per activity. None of these can be typed in.</li>
+      <li>Levels use one vocabulary everywhere: Beginner, Casual, Intermediate, Competitive. The onboarding chat accepts plain words ("pretty decent", "7 out of 10") and maps them to these.</li>
+      <li>MODEL.md §1 has the same list with types and validation.</li>
     </ul>`,
   },
   plan: {
@@ -807,13 +720,13 @@ const NOTES = {
     </ul>`,
   },
   me: {
-    title: 'Goodwill',
+    title: 'Your profile',
     body: `<ul>
-      <li>Earned only through things other people confirm: turning up, organising, good feedback.</li>
-      <li>It can't be bought, transferred or spent. Points from the same small group are capped, so rings of fake accounts can't farm each other.</li>
-      <li>Levels: New from 0, Regular from 100, Trusted from 500, Local legend from 1,000.</li>
-      <li>Low Goodwill means limits, not a ban. New accounts can join plans but can only send 3 invites a day and can't organise plans for more than 6 people.</li>
-      <li>Verification shows as a badge. The data behind it is never shown.</li>
+      <li>The top of the Me tab is your profile exactly as others see it: the same card everyone gets.</li>
+      <li>Below it, what only you see: age, avoid list, free times, travel distance. <b>Edit profile</b> opens every field with its allowed values.</li>
+      <li>Numbers are calculated, never typed: plans attended count once someone confirms you came; Goodwill is the sum of the ledger; tag counts come from feedback.</li>
+      <li>Goodwill levels: New 0–199, Regular 200–999, Trusted 1,000–2,999, Local legend 3,000+. About 90 points per plan you turn up to and give feedback on.</li>
+      <li>New-level limits: join plans freely, but only 3 invites a day and no hosting plans over 6 people without ID.</li>
     </ul>`,
   },
 };
@@ -834,6 +747,7 @@ const FLOWS = [
   ['History', () => { S.tab = 'me'; S.stack = [{ name: 'history' }]; render(); }, (n) => n === 'history'],
   ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
   ['Me', () => setTab('me'), (n) => n === 'me'],
+  ['Profile data', () => { S.tab = 'me'; S.stack = [{ name: 'profileData' }]; render(); }, (n) => n === 'profileData'],
 ];
 
 function renderNotes() {
@@ -867,6 +781,7 @@ function init() {
       if (!S.text.trim()) S.over = {};
       updatePreview();
     }
+    if (['pf-name', 'pf-bio', 'pf-age'].includes(e.target.id)) profileInput(e.target);
     if (e.target.id === 'exInput') { S.ex.q = e.target.value; S.ex.drop = {}; updateExplore(); }
     if (e.target.id === 'draftTitle') { S.draft.title = e.target.value; S.draft.titleEdited = true; composeLive(); }
     if (e.target.id === 'draftMeet') { S.draft.meet = e.target.value; S.draft.meetEdited = true; composeLive(); }
@@ -910,6 +825,8 @@ function init() {
     msgs.forEach((m) => { m.at = new Date(+NOW - (m.ago || 0) * 60e3); });
     S.read[id] = msgs.length - (id === 'live1' ? 1 : 0);
   }
+  S.ledger = seedLedger();
+  S.points = S.ledger.reduce((k, l) => k + l.pts, 0);
   S.ob = freshOnboarding();
   detectClaude();
   render();

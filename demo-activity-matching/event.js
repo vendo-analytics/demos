@@ -156,7 +156,7 @@ function peopleHTML(g, phase) {
   const going = g.members.map((m) => PERSON[m]);
   const interested = (g.interested || []).filter((m) => !g.members.includes(m)).map((m) => PERSON[m]);
   const played = ctxNow().played;
-  const row = (m) => `<div class="member" ${m.id !== 'me' ? `data-act="person" data-v="${m.id}" style="cursor:pointer"` : ''}>${avatar(m, 's')}<div style="flex:1;min-width:0"><b>${esc(m.id === 'me' ? 'You' : m.name)}</b>${m.id === g.org ? ' <span class="small muted">organiser</span>' : ''}<div class="small muted">★ ${m.rating} · ${plural(m.events, 'event')}${m.id !== 'me' && played[m.id] ? ` · played with you ${played[m.id]}×` : ''}</div></div>${gw(personPts(m))}</div>`;
+  const row = (m) => `<div class="member" ${m.id !== 'me' ? `data-act="person" data-v="${m.id}" style="cursor:pointer"` : ''}>${avatar(m, 's')}<div style="flex:1;min-width:0"><b>${esc(m.id === 'me' ? 'You' : m.name)}</b>${m.id === g.org ? ' <span class="small muted">organiser</span>' : ''}<div class="small muted">${levelLabel(profileOf(m.id).levels[g.act]) || 'New to it'} · ${plural(profileOf(m.id).events, 'plan')}${m.id !== 'me' && played[m.id] ? ` · played with you ${played[m.id]}×` : ''}</div></div>${gw(personPts(m))}</div>`;
   return `<div><h3 class="h3">${phase === 'done' ? 'Who came' : "Who's going"}</h3><div style="margin-top:4px">${going.map(row).join('')}</div>
     ${interested.length && phase !== 'done' ? `<div class="row small" style="margin-top:8px"><span class="stack">${interested.map((m) => avatar(m, 's')).join('')}</span><span class="muted">${plural(interested.length, 'person')} interested</span></div>` : ''}</div>`;
 }
@@ -353,11 +353,11 @@ VIEWS.history = () => {
   const { items, byAct, hosted } = historyStats();
   const played = Object.entries(ctxNow().played).sort((a, b) => b[1] - a[1]).slice(0, 5);
   return bar('History') + `<div class="pad">
-    <div class="kpis"><div><b>${ME.events}</b><span>attended</span></div><div><b>${hosted}</b><span>hosted</span></div><div><b>${ME.noShows}</b><span>no-shows</span></div></div>
+    <div class="kpis"><div><b>${myStats().events}</b><span>confirmed</span></div><div><b>${myStats().hosted}</b><span>hosted</span></div><div><b>${ME.noShows}</b><span>no-shows</span></div></div>
     <div><h3 class="h3">By activity</h3><div class="chips" style="margin-top:6px">${byAct.map(([a, n]) => `<span class="chip">${esc(ACT[a].label)} <span class="num muted">${n}</span></span>`).join('')}</div></div>
     <div><h3 class="h3">People you've played with</h3><div class="chips" style="margin-top:6px">${played.map(([pid, n]) => `<button type="button" class="chip" data-act="person" data-v="${pid}">${esc(PERSON[pid].name)} <span class="num muted">${n}×</span></button>`).join('')}</div></div>
     <div class="card" style="gap:0">${items.map(historyRowHTML).join('')}</div>
-    <p class="small muted" style="margin:0">Showing your last ${items.length}. Others see only how many times you've done each activity, never where or when.</p>
+    <p class="small muted" style="margin:0">Plans count once someone who was there confirms you came, so ${items.length - myStats().events} of these ${items.length} aren't counted yet. Others see only how many times you've done each activity, never where or when.</p>
   </div>`;
 };
 
@@ -455,6 +455,7 @@ Object.assign(ACTIONS, {
     after(2500, () => {
       S.mem[v] = 'attended';
       g.confirmedBy = g.org;
+      g.confirmed = true;
       addPoints(50, `Attended ${g.title}, confirmed by ${PERSON[g.org].name}`);
       postSys(v, `${PERSON[g.org].name} confirmed ${ME.name} is here`);
       updateBadge();
@@ -477,9 +478,11 @@ Object.assign(ACTIONS, {
     const came = Object.entries(S.rc.came).filter(([, c]) => c).map(([pid]) => pid);
     const missed = Object.keys(S.rc.came).filter((pid) => !S.rc.came[pid]);
     g.needsRollcall = false;
+    g.confirmed = true;
     g.members = ['me', ...came];
     CTX = null;
-    if (came.length + 1 >= 3) addPoints(100, `Organised ${g.title}, ${came.length + 1} came`);
+    addPoints(GOODWILL_RULES.attended, `Attended ${g.title}`);
+    if (came.length + 1 >= 3) addPoints(GOODWILL_RULES.hosted, `Hosted ${g.title}, ${came.length + 1} came`);
     S.rc = null;
     back();
     updateBadge();

@@ -69,7 +69,7 @@ function draftIntent(d) {
 function draftCheck(d) {
   const scan = screenMessage(`${d.note || ''} ${d.meet || ''} ${d.directions || ''} ${d.bring || ''}`);
   const size = d.have + d.seek;
-  const sizeBlocked = size > 6 && S.points < 100 && !S.idVerified;
+  const sizeBlocked = size > 6 && S.points < 200 && !S.idVerified;
   let why = null;
   if (!d.act) why = 'Pick an activity';
   else if (d.day == null) why = 'Pick a day';
@@ -152,7 +152,7 @@ VIEWS.compose = () => {
       <div><span>People who might be keen, within their 3-a-week cap</span><b class="num">${reach.passive.length}</b></div>
       <div><span>Shown in Explore and search within</span><b class="num">${ME.radius || 10} km</b></div>
     </div></div>
-    ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or 100+ Goodwill. Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or 100+ Goodwill. You have ${fmtPts(S.points)}.</p>` : ''}
+    ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or the Regular level (200+ Goodwill). Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or the Regular level (200+ Goodwill). You have ${fmtPts(S.points)}.</p>` : ''}
     <div id="publishWrap">${publishBtnHTML()}</div>
   </div>`;
 };
@@ -164,7 +164,7 @@ function requestsHTML(g) {
   if (!reqs.length) return '';
   return `<div class="card"><p class="eyebrow">Asking to join</p>${reqs.map((pid) => {
     const p = PERSON[pid];
-    return `<div class="member">${avatar(p, 's')}<div style="flex:1;min-width:0"><b>${esc(p.name)}</b> ${gw(p.points)}<div class="small muted">★ ${p.rating} · ${plural(p.events, 'event')} · ${p.noShows ? plural(p.noShows, 'no-show') : 'no no-shows'}</div></div>
+    return `<div class="member">${avatar(p, 's')}<div style="flex:1;min-width:0"><b>${esc(p.name)}</b> ${gw(p.points)}<div class="small muted">${levelLabel(p.levels[g.act]) || 'New to it'} · ${plural(p.events, 'plan')} · ${p.noShows ? plural(p.noShows, 'no-show') : 'no no-shows'}</div></div>
       <button type="button" class="btn sm sea" data-act="approve" data-v="${g.id}:${pid}">Accept</button><button type="button" class="btn sm ghost" data-act="decline" data-v="${g.id}:${pid}" aria-label="Decline ${esc(p.name)}">No</button></div>`;
   }).join('')}<p class="small muted" style="margin:0">Check their Goodwill and no-shows. Declining is private.</p></div>`;
 }

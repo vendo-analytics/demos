@@ -52,15 +52,38 @@ const PLACES = [
   { name: 'Parramatta', lat: -33.8150, lng: 151.0010 },
 ];
 
+// Self-rated level per activity. One vocabulary everywhere: profiles, plans, search and onboarding.
+const SKILL_LEVELS = [
+  { id: 'beginner', label: 'Beginner', desc: 'New to it or still learning the basics' },
+  { id: 'casual', label: 'Casual', desc: 'Knows the rules, plays for fun' },
+  { id: 'intermediate', label: 'Intermediate', desc: 'Plays regularly and holds their own' },
+  { id: 'competitive', label: 'Competitive', desc: 'Plays to win, in leagues or comps' },
+];
+
+// Feedback tags. Positive ones are counted on profiles; negative ones only go to Keen's review team.
+const POSITIVE_TAGS = ['On time', 'Friendly', 'Good sport', 'Skill as described', 'Would play again'];
+const NEGATIVE_TAGS = ['Late', 'Rude', 'Skill not as described', 'Made me uncomfortable', 'Asked for contact details'];
+
+// How Goodwill is earned. Every profile's total follows these rules.
+const GOODWILL_RULES = {
+  attended: 50,      // turned up, confirmed by someone who was there
+  feedbackGiven: 20, // left feedback after a plan
+  goodReview: 10,    // per positive review received, max 3 per plan
+  hosted: 100,       // organised a plan where 3 or more came
+  idVerified: 100,   // once
+  noShow: -150,      // reported by 2 or more attendees
+  lateCancels: -50,  // 3 late cancels in 30 days
+};
+
 // Things people can ask not to be suggested. Kept private; used only to filter.
 const AVOIDS = [
-  { id: 'water', label: 'Water sports', words: ['water', 'swim', 'swimming', 'ocean', 'surf', 'surfing', 'sea', 'drown'] },
-  { id: 'heights', label: 'Heights', words: ['height', 'heights', 'climb', 'climbing', 'cliff', 'cliffs'] },
-  { id: 'alcohol', label: 'Alcohol and bars', words: ['alcohol', 'drink', 'drinks', 'drinking', 'booze', 'pub', 'pubs', 'bar', 'bars', 'sober', 'beer'] },
-  { id: 'contact', label: 'Contact sports', words: ['contact', 'tackle', 'tackling', 'rough', 'physical'] },
-  { id: 'late', label: 'Late nights', words: ['late', 'late nights', 'night', 'nights'] },
-  { id: 'early', label: 'Early starts', words: ['early', 'early mornings', 'early starts', 'sunrise'] },
-  { id: 'big', label: 'Big groups', words: ['big groups', 'big group', 'crowds', 'crowd', 'large groups'] },
+  { id: 'water', label: 'Water sports', desc: 'Surfing and ocean swims', words: ['water', 'swim', 'swimming', 'ocean', 'surf', 'surfing', 'sea', 'drown'] },
+  { id: 'heights', label: 'Heights', desc: 'Bouldering and climbing', words: ['height', 'heights', 'climb', 'climbing', 'cliff', 'cliffs'] },
+  { id: 'alcohol', label: 'Alcohol and bars', desc: 'Plans at licensed venues', words: ['alcohol', 'drink', 'drinks', 'drinking', 'booze', 'pub', 'pubs', 'bar', 'bars', 'sober', 'beer'] },
+  { id: 'contact', label: 'Contact sports', desc: 'Football and basketball', words: ['contact', 'tackle', 'tackling', 'rough', 'physical'] },
+  { id: 'late', label: 'Late nights', desc: 'Plans that finish after 10pm', words: ['late', 'late nights', 'night', 'nights'] },
+  { id: 'early', label: 'Early starts', desc: 'Plans that start before 7am', words: ['early', 'early mornings', 'early starts', 'sunrise'] },
+  { id: 'big', label: 'Big groups', desc: 'Plans for 8 or more people', words: ['big groups', 'big group', 'crowds', 'crowd', 'large groups'] },
 ];
 
 const GOALS = [
@@ -72,11 +95,12 @@ const GOALS = [
   { id: 'unwind', label: 'Unwind', words: ['relax', 'unwind', 'stress', 'switch off', 'fun', 'chill', 'de-stress'] },
 ];
 
+// When someone is usually free. Mornings are before 12pm; the second bucket is 12pm onwards.
 const AVAILABILITY = [
-  { id: 'wd-am', label: 'Weekday mornings' },
-  { id: 'wd-pm', label: 'Weekday evenings' },
-  { id: 'we-am', label: 'Weekend mornings' },
-  { id: 'we-pm', label: 'Weekend afternoons' },
+  { id: 'wd-am', label: 'Weekday mornings', desc: 'Mon–Fri, before 12pm' },
+  { id: 'wd-pm', label: 'Weekday afternoons and evenings', desc: 'Mon–Fri, 12pm onwards' },
+  { id: 'we-am', label: 'Weekend mornings', desc: 'Sat–Sun, before 12pm' },
+  { id: 'we-pm', label: 'Weekend afternoons and evenings', desc: 'Sat–Sun, 12pm onwards' },
 ];
 
 // Public places events can happen at. No home addresses, ever.
@@ -101,68 +125,93 @@ const VENUES = [
 ];
 const VENUE = Object.fromEntries(VENUES.map((v) => [v.id, v]));
 
-// Friends who come along with the user ("we're two"). They join plans with the user.
-const FRIENDS = [
-  { id: 'f1', name: 'Jordan', suburb: 'Manly', hue: 270, points: 410, events: 15, rating: 4.8, idVerified: true, phoneVerified: true, joined: 'Mar 2026', interests: ['padel', 'running'], skill: 'casual', noShows: 0 },
-  { id: 'f2', name: 'Priyanka', suburb: 'Manly', hue: 40, points: 220, events: 8, rating: 4.9, idVerified: false, phoneVerified: true, joined: 'May 2026', interests: ['padel', 'football'], skill: 'casual', noShows: 0 },
-  { id: 'f3', name: 'Tim', suburb: 'Balgowlah', hue: 120, points: 150, events: 6, rating: 4.7, idVerified: false, phoneVerified: true, joined: 'Jun 2026', interests: ['football'], skill: 'casual', noShows: 0 },
+// ---------- people ----------
+// Every profile has the same fields (see PROFILE_FIELDS in profile.js and MODEL.md §1).
+// Rows list what a person entered; counts like Goodwill, tags and activity counts are derived from them below.
+
+// [id, first name, suburb, avatar hue, member since, ID verified, interests ("activity:level"), goals, bio,
+//  events attended, plans hosted, hosting rating (shown once they've hosted 3), no-shows]
+const PEOPLE_ROWS = [
+  ['p1', 'Mia', 'Manly', 12, 'Mar 2025', true, 'padel:intermediate surfing:casual running:casual', 'friends fitness', 'Usually on court before work. Happy to rotate partners.', 48, 6, 4.9, 0],
+  ['p2', 'Tom', 'Balgowlah', 210, 'Aug 2025', true, 'padel:intermediate tennis:intermediate cycling:casual', 'compete fitness', 'I play doubles with my partner Jess most weekends.', 21, 2, null, 0],
+  ['p3', 'Priya', 'Mosman', 330, 'Jan 2026', false, 'tennis:intermediate padel:casual hiking:casual', 'friends outdoors', 'Moved from Melbourne last year, still finding my people.', 12, 0, null, 0],
+  ['p4', 'Luca', 'Manly', 140, 'Nov 2024', true, 'football:intermediate running:casual swimming:casual', 'friends fitness', 'I run the Friday 6-a-side. All levels, just turn up on time.', 73, 31, 4.9, 0],
+  ['p5', 'Hannah', 'Dee Why', 280, 'Sep 2026', false, 'padel:beginner pickleball:beginner', 'learn friends', 'New to padel and keen to improve.', 3, 0, null, 0],
+  ['p6', 'Kai', 'Manly', 185, 'Jun 2024', true, 'surfing:competitive swimming:competitive volleyball:intermediate', 'outdoors friends', 'Surf coach on weekdays. On weekends I help beginners for free.', 96, 40, 5.0, 0],
+  ['p7', 'Ben', 'Freshwater', 40, 'Feb 2025', true, 'football:casual basketball:intermediate', 'fitness friends', 'Left foot only.', 30, 1, null, 1],
+  ['p8', 'Zoe', 'Freshwater', 300, 'Jul 2026', false, 'surfing:beginner photowalk:casual', 'learn outdoors', 'Still falling off the board. Would love a surf buddy.', 7, 2, null, 0],
+  ['p9', 'Omar', 'Balgowlah', 95, 'Apr 2025', true, 'football:casual running:casual', 'fitness friends', 'I bring cones to everything.', 26, 3, 4.7, 0],
+  ['p10', 'Grace', 'Manly', 350, 'Jan 2025', true, 'running:intermediate swimming:intermediate', 'fitness outdoors', 'Corso to Shelly and back, most mornings.', 41, 22, 4.9, 0],
+  ['p11', 'Ravi', 'Balgowlah', 25, 'Oct 2025', false, 'running:casual cycling:casual', 'fitness', 'Training for my first half marathon.', 18, 4, 4.6, 0],
+  ['p12', 'Jack', 'Manly', 160, 'Mar 2026', true, 'football:competitive squash:intermediate', 'compete', 'Played state league years ago.', 11, 0, null, 2],
+  ['p13', 'Sofia', 'Freshwater', 5, 'Dec 2025', true, 'football:intermediate volleyball:casual', 'friends fitness', 'Looking for a regular mixed game.', 19, 6, 4.8, 0],
+  ['p14', 'Noah', 'Manly', 230, 'May 2026', false, 'volleyball:casual surfing:casual', 'friends', 'My brother and I play most Sundays.', 9, 0, null, 0],
+  ['p15', 'Emma', 'Neutral Bay', 320, 'Jul 2025', true, 'tennis:intermediate pickleball:casual', 'compete friends', 'Weeknight hitter.', 28, 9, 4.9, 0],
+  ['p16', 'Leo', 'Surry Hills', 60, 'Nov 2025', false, 'boardgames:intermediate chess:intermediate', 'friends unwind', 'Owner of far too many board games.', 16, 8, 4.8, 0],
+  ['p17', 'Margaret', 'Mosman', 110, 'Feb 2024', true, 'explore:intermediate hiking:casual photowalk:casual chess:casual', 'friends outdoors', "I've lived in Mosman 20 years and love showing people the harbour walks.", 52, 20, 5.0, 0],
+  ['p18', 'Diego', 'Sydney CBD', 20, 'Jun 2026', false, 'language:intermediate football:casual', 'friends learn', 'Native Spanish speaker, learning Japanese.', 8, 0, null, 0],
+  ['p19', 'Aiko', 'Marrickville', 340, 'Sep 2025', true, 'climbing:intermediate language:beginner', 'fitness learn', 'V3–V4 on a good day.', 22, 5, 4.8, 0],
+  ['p20', 'Chris', 'Mosman', 200, 'Apr 2026', false, 'pickleball:casual tennis:casual', 'fitness', 'Converted tennis player.', 14, 1, null, 0],
+  ['p21', 'Ella', 'Mosman', 290, 'Mar 2025', true, 'padel:competitive tennis:competitive', 'compete', 'Looking for strong doubles games.', 34, 3, 4.7, 0],
+  ['p22', 'Finn', 'Manly', 130, 'Aug 2026', false, 'hiking:casual running:beginner', 'outdoors unwind', 'Weekend walker. Slow pace, many snack stops.', 5, 2, null, 0],
+  ['p23', 'Isla', 'Manly', 15, 'Dec 2024', true, 'padel:intermediate pickleball:casual running:casual', 'friends fitness', 'I book the courts and bring the balls.', 44, 25, 4.9, 0],
+  ['p24', 'Marco', 'Balgowlah', 75, 'Oct 2025', true, 'padel:casual football:casual', 'fitness friends', 'Padel twice a week, football when my knee lets me.', 17, 0, null, 0],
+  ['p25', 'Ruby', 'Manly', 345, 'Sep 2026', false, 'surfing:beginner swimming:casual', 'learn outdoors', 'Learning to surf this summer.', 2, 0, null, 0],
+  ['p26', 'Theo', 'Dee Why', 180, 'May 2026', false, 'padel:casual running:intermediate surfing:casual', 'fitness', 'Early riser.', 10, 1, null, 0],
+  ['p27', 'Ana', 'Balgowlah', 250, 'Feb 2026', true, 'padel:casual language:competitive', 'friends', 'Portuguese and Spanish speaker.', 15, 6, 4.8, 0],
+  ['p28', 'Josh', 'Manly', 100, 'Jul 2026', false, 'padel:beginner basketball:casual', 'learn friends', "I've only played padel twice.", 4, 0, null, 0],
+  ['p29', 'Olivia', 'Freshwater', 310, 'Nov 2025', true, 'padel:casual hiking:casual boardgames:intermediate', 'friends unwind', 'Happy to make up numbers.', 20, 7, 4.9, 0],
+  ['p30', 'Will', 'Bondi', 205, 'Jan 2025', true, 'volleyball:intermediate surfing:intermediate padel:casual', 'friends outdoors', "I'm at the beach most days.", 27, 10, 4.7, 0],
 ];
 
-// The signed-in user. Login is out of scope; onboarding (the chat) can overwrite this sample profile.
+// Friends who come along with the user ("we're two"). Same fields as everyone else.
+const FRIEND_ROWS = [
+  ['f1', 'Jordan', 'Manly', 270, 'Mar 2026', true, 'padel:casual running:casual', 'fitness friends', 'Sam\'s padel partner.', 15, 0, null, 0],
+  ['f2', 'Priyanka', 'Manly', 40, 'May 2026', false, 'padel:casual football:casual', 'friends', 'Always up for doubles.', 8, 0, null, 0],
+  ['f3', 'Tim', 'Balgowlah', 120, 'Jun 2026', false, 'football:intermediate', 'fitness', 'Goalkeeper by default.', 6, 0, null, 0],
+];
+
+const hashOf = (str) => { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+
+// Turn a row into a profile and derive everything that follows from it.
+function personFromRow([id, name, suburb, hue, joined, idVerified, interests, goals, bio, events, hosted, hostRating, noShows]) {
+  const list = interests.split(' ').map((x) => x.split(':'));
+  const p = {
+    id, name, suburb, hue, joined, bio, idVerified, phoneVerified: true, photoVerified: true,
+    interests: list.map(([a]) => a), levels: Object.fromEntries(list), goals: goals.split(' '),
+    events, hosted, hostRating: hosted >= 3 ? hostRating : null, noShows,
+  };
+  // Attended plans split across their activities, favouring the first ones. Always sums to `events`.
+  const w = p.interests.map((_, i) => [0.5, 0.3, 0.2, 0.1, 0.1][i]);
+  const sum = w.reduce((a, b) => a + b, 0);
+  const counts = w.map((x) => Math.floor((events * x) / sum));
+  counts[0] += events - counts.reduce((a, b) => a + b, 0);
+  p.activityCounts = Object.fromEntries(p.interests.map((a, i) => [a, counts[i]]));
+  // Positive reviews and tag counts, scaled from attended plans (with a little variation per person).
+  p.reviews = events * 2; // about two positive reviews per plan, matching the Goodwill estimate below
+  const share = [0.85, 0.75, 0.6, 0.4, 0.55];
+  p.tags = Object.fromEntries(POSITIVE_TAGS.map((t, i) => [t, Math.round(p.reviews * share[i] * (0.85 + (hashOf(id + t) % 30) / 100))]));
+  // Goodwill follows the published rules: per plan +50 attended, +20 feedback, ~+20 reviews.
+  p.points = Math.max(0, events * (GOODWILL_RULES.attended + GOODWILL_RULES.feedbackGiven + 2 * GOODWILL_RULES.goodReview)
+    + hosted * GOODWILL_RULES.hosted + (idVerified ? GOODWILL_RULES.idVerified : 0) + noShows * GOODWILL_RULES.noShow);
+  return p;
+}
+
+const PEOPLE = PEOPLE_ROWS.map(personFromRow);
+const FRIENDS = FRIEND_ROWS.map(personFromRow);
+
+// The signed-in user. Login is out of scope; the onboarding chat can overwrite what they entered.
+// Their counts (events, hosted, Goodwill, tags) are derived from HISTORY and the ledger at runtime.
 const ME = {
-  id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, points: 640, events: 17, rating: 4.8,
-  idVerified: false, phoneVerified: true, joined: 'Feb 2026', noShows: 0, skill: 'casual',
+  id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, joined: 'Feb 2026',
+  bio: 'Padel most weekends, learning to surf.',
+  phone: '+61412345678', phoneVerified: true, photoVerified: true, idVerified: false,
   interests: ['padel', 'surfing', 'running', 'boardgames', 'language'],
   levels: { padel: 'casual', surfing: 'beginner', running: 'intermediate', boardgames: 'casual', language: 'beginner' },
-  radius: 10, age: 34, goals: ['friends', 'fitness'], avoid: ['alcohol'], free: ['wd-pm', 'we-am'],
+  goals: ['friends', 'fitness'],
+  age: 34, radius: 10, avoid: ['alcohol'], free: ['wd-pm', 'we-am'], askCap: 3,
+  noShows: 0,
 };
-
-// [id, first name, suburb, avatar hue, goodwill, events attended, rating, ID verified, joined, interests, skill, bio, no-shows]
-const PEOPLE_ROWS = [
-  ['p1', 'Mia', 'Manly', 12, 1240, 48, 4.9, true, 'Mar 2025', ['padel', 'surfing', 'running'], 'casual', 'Usually on court before work. Happy to rotate partners.', 0],
-  ['p2', 'Tom', 'Balgowlah', 210, 520, 21, 4.7, true, 'Aug 2025', ['padel', 'tennis', 'cycling'], 'intermediate', 'Play doubles with my partner Jess most weekends.', 0],
-  ['p3', 'Priya', 'Mosman', 330, 310, 12, 4.8, false, 'Jan 2026', ['tennis', 'padel', 'hiking'], 'intermediate', 'Moved from Melbourne last year, still finding my people.', 0],
-  ['p4', 'Luca', 'Manly', 140, 1820, 73, 4.9, true, 'Nov 2024', ['football', 'running', 'swimming'], 'casual', 'Run the Friday 6-a-side. All levels, just turn up on time.', 0],
-  ['p5', 'Hannah', 'Dee Why', 280, 95, 3, 4.6, false, 'Sep 2026', ['padel', 'pickleball'], 'beginner', 'New to padel, very keen to improve.', 0],
-  ['p6', 'Kai', 'Manly', 185, 2310, 96, 5.0, true, 'Jun 2024', ['surfing', 'swimming', 'volleyball'], 'competitive', 'Surf coach on weekdays. Weekends I help beginners for free.', 0],
-  ['p7', 'Ben', 'Freshwater', 40, 760, 30, 4.6, true, 'Feb 2025', ['football', 'basketball'], 'casual', 'Left foot only.', 1],
-  ['p8', 'Zoe', 'Freshwater', 300, 180, 7, 4.8, false, 'Jul 2026', ['surfing', 'photowalk'], 'beginner', 'Still falling off the board. Would love a surf buddy.', 0],
-  ['p9', 'Omar', 'Balgowlah', 95, 640, 26, 4.7, true, 'Apr 2025', ['football', 'running'], 'casual', 'Bring cones to everything.', 0],
-  ['p10', 'Grace', 'Manly', 350, 980, 41, 4.9, true, 'Jan 2025', ['running', 'swimming'], 'intermediate', 'Corso to Shelly and back, most mornings.', 0],
-  ['p11', 'Ravi', 'Balgowlah', 25, 430, 18, 4.5, false, 'Oct 2025', ['running', 'cycling'], 'casual', 'Training for my first half marathon.', 0],
-  ['p12', 'Jack', 'Manly', 160, 300, 11, 4.4, true, 'Mar 2026', ['football', 'squash'], 'competitive', 'Played state league years ago.', 2],
-  ['p13', 'Sofia', 'Freshwater', 5, 520, 19, 4.8, true, 'Dec 2025', ['football', 'volleyball'], 'intermediate', 'Looking for a regular mixed game.', 0],
-  ['p14', 'Noah', 'Manly', 230, 270, 9, 4.7, false, 'May 2026', ['volleyball', 'surfing'], 'casual', 'Me and my brother play most Sundays.', 0],
-  ['p15', 'Emma', 'Neutral Bay', 320, 690, 28, 4.9, true, 'Jul 2025', ['tennis', 'pickleball'], 'intermediate', 'Weeknight hitter, 3.5 level-ish.', 0],
-  ['p16', 'Leo', 'Surry Hills', 60, 410, 16, 4.8, false, 'Nov 2025', ['boardgames', 'chess'], 'casual', 'Owner of far too many board games.', 0],
-  ['p17', 'Margaret', 'Mosman', 110, 1510, 52, 5.0, true, 'Feb 2024', ['explore', 'hiking', 'photowalk'], 'casual', 'Lived in Mosman 20 years. Love showing people the harbour walks.', 0],
-  ['p18', 'Diego', 'Sydney CBD', 20, 220, 8, 4.6, false, 'Jun 2026', ['language', 'football'], 'casual', 'Native Spanish speaker, learning Japanese.', 0],
-  ['p19', 'Aiko', 'Marrickville', 340, 580, 22, 4.8, true, 'Sep 2025', ['climbing', 'language'], 'intermediate', 'V3-V4 on a good day.', 0],
-  ['p20', 'Chris', 'Mosman', 200, 350, 14, 4.5, false, 'Apr 2026', ['pickleball', 'tennis'], 'casual', 'Converted tennis player.', 0],
-  ['p21', 'Ella', 'Mosman', 290, 870, 34, 4.8, true, 'Mar 2025', ['padel', 'tennis'], 'competitive', 'Looking for strong doubles games.', 0],
-  ['p22', 'Finn', 'Manly', 130, 150, 5, 4.9, false, 'Aug 2026', ['hiking', 'running'], 'casual', 'Weekend walker, slow pace, many snack stops.', 0],
-  ['p23', 'Isla', 'Manly', 15, 1100, 44, 4.9, true, 'Dec 2024', ['padel', 'pickleball', 'running'], 'casual', 'Book the courts, bring the balls.', 0],
-  ['p24', 'Marco', 'Balgowlah', 75, 460, 17, 4.7, true, 'Oct 2025', ['padel', 'football'], 'casual', 'Padel twice a week, football when my knee lets me.', 0],
-  ['p25', 'Ruby', 'Manly', 345, 60, 2, 5.0, false, 'Sep 2026', ['surfing', 'swimming'], 'beginner', 'Learning to surf this summer.', 0],
-  ['p26', 'Sam B', 'Dee Why', 180, 240, 10, 4.6, false, 'May 2026', ['padel', 'running', 'surfing'], 'casual', 'Early riser.', 0],
-  ['p27', 'Ana', 'Balgowlah', 250, 400, 15, 4.8, true, 'Feb 2026', ['padel', 'language'], 'casual', 'Portuguese and Spanish speaker.', 0],
-  ['p28', 'Josh', 'Manly', 100, 120, 4, 4.5, false, 'Jul 2026', ['padel', 'basketball'], 'beginner', 'Only played padel twice.', 0],
-  ['p29', 'Olivia', 'Freshwater', 310, 530, 20, 4.9, true, 'Nov 2025', ['padel', 'hiking', 'boardgames'], 'casual', 'Happy to make up numbers.', 0],
-  ['p30', 'Will', 'Bondi', 205, 690, 27, 4.7, true, 'Jan 2025', ['volleyball', 'surfing', 'padel'], 'intermediate', 'Bondi local, beach most days.', 0],
-];
-
-const PEOPLE = PEOPLE_ROWS.map(([id, name, suburb, hue, points, events, rating, idVerified, joined, interests, skill, bio, noShows]) => ({
-  id, name, suburb, hue, points, events, rating, idVerified, phoneVerified: true, joined, interests, skill, bio, noShows,
-}));
-
-const REVIEW_BANK = [
-  { text: 'Turned up early and sorted the court booking.', tags: ['On time', 'Organised'] },
-  { text: 'Friendly, good sport, would play again.', tags: ['Friendly', 'Would play again'] },
-  { text: 'Level was exactly as described.', tags: ['Skill as described'] },
-  { text: 'Made the new people feel welcome.', tags: ['Friendly', 'Welcoming'] },
-  { text: 'Great energy, kept the game moving.', tags: ['Good sport'] },
-  { text: 'Brought spare gear for everyone.', tags: ['Organised'] },
-];
 
 // Open asks from other people: what they said, mapped to the same graph shape as ours.
 // `when` is [day, fromHour, toHour]. Day is a weekday ('sat') or an offset from today ('+3', '-9').
@@ -217,13 +266,13 @@ const PLANS = [
 
 // A plan the user went to last week. It is waiting for their feedback.
 const PAST_PLANS = [
-  { id: 'past1', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['-fri', 18, 19.5], members: ['p4', 'p7', 'p9', 'p12', 'me'], interested: [], size: 11, skill: 'casual', past: true },
+  { id: 'past1', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['-fri', 18, 19.5], members: ['p4', 'p7', 'p9', 'p12', 'me'], interested: [], size: 11, skill: 'casual', past: true, confirmed: false },
 ];
 
 // The user's attended and hosted events, newest first. `rated` is the star rating they gave.
-// h0 was hosted by the user and still needs its attendance taken.
+// All are confirmed attendance except h0, which the user hosted and still needs to take attendance for.
 const HISTORY = [
-  { id: 'h0', org: 'me', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['-7', 8, 10], members: ['me', 'p23', 'p24', 'p1'], interested: [], size: 4, skill: 'casual', past: true, needsRollcall: true },
+  { id: 'h0', org: 'me', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['-7', 8, 10], members: ['me', 'p23', 'p24', 'p1'], interested: [], size: 4, skill: 'casual', past: true, needsRollcall: true, confirmed: false },
   { id: 'h2', org: 'p10', act: 'running', title: 'Sunrise run', venueId: 'manly-wharf', when: ['-8', 6, 7], members: ['p10', 'p22', 'p11', 'me'], interested: [], size: 12, skill: 'casual', past: true, rated: 5 },
   { id: 'h3', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['-16', 18, 19.5], members: ['p4', 'p7', 'p9', 'me'], interested: [], size: 11, skill: 'casual', past: true, rated: 4 },
   { id: 'h4', org: 'p27', act: 'language', title: 'Spanish over coffee', venueId: 'corso-cafe', when: ['-19', 7.5, 8.5], members: ['p27', 'p18', 'me'], interested: [], size: 6, skill: 'beginner', past: true, rated: 5 },
@@ -233,8 +282,8 @@ const HISTORY = [
   { id: 'h8', org: 'me', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['-35', 8, 10], members: ['me', 'p23', 'p24', 'p1'], interested: [], size: 4, skill: 'casual', past: true, rated: 5 },
 ];
 
-// What other people have said about the user: positive tags only are shown.
-const FEEDBACK_ABOUT_ME = { reviews: 15, stars: 4.8, tags: { 'On time': 13, Friendly: 11, 'Would play again': 10, 'Good sport': 8, 'Skill as described': 6 } };
+// Positive reviews the user has received across their 7 confirmed plans (2 per plan). Negative ones aren't shown.
+const FEEDBACK_ABOUT_ME = { reviews: 14, tags: { 'On time': 12, Friendly: 11, 'Good sport': 7, 'Skill as described': 5, 'Would play again': 9 } };
 
 // An ask the user saved earlier that nobody has matched yet.
 const MY_ASKS = [
@@ -283,5 +332,5 @@ for (const g of [...PLANS, ...PAST_PLANS, ...HISTORY]) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { CATEGORIES, ACTIVITIES, AVOIDS, GOALS, AVAILABILITY, VENUES, VENUE, FRIENDS, PLACES, ME, PEOPLE, REVIEW_BANK, OPEN_ASKS, PLANS, PAST_PLANS, HISTORY, FEEDBACK_ABOUT_ME, MY_ASKS, SEED_CHAT };
+  module.exports = { CATEGORIES, ACTIVITIES, SKILL_LEVELS, POSITIVE_TAGS, NEGATIVE_TAGS, GOODWILL_RULES, AVOIDS, GOALS, AVAILABILITY, VENUES, VENUE, FRIENDS, PLACES, ME, PEOPLE, OPEN_ASKS, PLANS, PAST_PLANS, HISTORY, FEEDBACK_ABOUT_ME, MY_ASKS, SEED_CHAT };
 }

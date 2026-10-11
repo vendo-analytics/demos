@@ -23,45 +23,125 @@ shape, it's noted.
 
 ## 1. Profile
 
-A profile has three layers. **Public** is what other members see. **Private** is only used for matching and filtering.
-**Derived** is computed from what the person does on Keen and is never edited directly.
+Every person has the same profile shape: you, other members and friends who come along. Fields fall into three groups:
 
-### Public
+- **Public:** shown on the profile card to anyone signed in.
+- **Private:** only the person and Keen. Used for matching and safety, never shown.
+- **Calculated:** worked out by Keen from what people do. Never typed in, so they can't be faked.
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `first_name` | text | First name only. Never a surname. |
-| `photo_url` | text | Must pass the real-photo check (selfie match) before the profile can join plans. |
-| `home_suburb_id` | ref Suburb | Shown as the suburb name. Distances to it are rounded. |
-| `bio` | text, 160 chars | Optional. Screened like chat (no contact details). |
-| `joined_at` | date | Shown as month and year. |
-| `interests[]` | Activity + `level` | `level` is beginner, casual, intermediate or competitive. Set during onboarding and nudged by feedback. |
-| `goals[]` | enum | fitness, friends, learn, compete, outdoors, unwind. |
-| `verification` | flags | `phone` (required), `photo` (required), `id` (optional). Shown as badges; the documents never are. |
-| `goodwill` | int | Running total from the ledger. The level (New, Regular, Trusted, Local legend) is derived from it. |
+In the prototype, **Me → Edit profile** (the "Profile data" screen) shows every field below with its current value and
+allowed values. It's driven by `PROFILE_FIELDS` in `profile.js`.
 
-### Private (owner only)
+### 1.1 Public fields
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `phone_e164` | text | Verified at sign-up. One account per number; VoIP and virtual numbers are blocked. Never shown. |
-| `birth_year` | int | Only used to enforce 18+ and for optional age-range matching. Never shown. |
-| `travel_radius_km` | int | Default 10. |
-| `avoid[]` | enum | water, heights, alcohol, contact, late, early, big. Filters suggestions, never shown. |
-| `availability[]` | enum | `wd-am`, `wd-pm`, `we-am`, `we-pm` (weekday/weekend × morning/afternoon-evening). |
-| `notification_caps` | json | Default: at most 3 might-be-keen asks a week. |
-| `blocked_user_ids[]` | refs | Blocking is mutual and silent. |
+| Field | Label | Type | Required | Allowed values / validation | Set by | Example |
+| --- | --- | --- | --- | --- | --- | --- |
+| `first_name` | First name | text | yes | 1–30 letters, spaces, hyphens, apostrophes. One first name, or a double one like "Mary Jane". Never a surname. | Onboarding chat | `Mia` |
+| `photo` | Photo | image | yes | A clear photo of the face, checked against a selfie (`photo_status`: pending, verified, rejected). Must be verified before joining plans. | Sign-up | – |
+| `home_suburb` | Home suburb | ref Suburb | yes | One suburb from the list (§1.5). Shown as the name plus a rounded distance, never an address. | Onboarding chat | `Manly` |
+| `bio` | About you | text | no | Up to 160 characters. Screened: contact details and payment talk can't be saved. | You | `Usually on court before work.` |
+| `interests` | Activities and levels | list of {activity, level} | yes | 1–10 entries. `activity` from the tag list (§1.5), `level` from Levels (§1.5). | Onboarding chat | `[{padel, intermediate}, {surfing, casual}]` |
+| `goals` | Here to | list | no | Up to 3 from Goals (§1.5). | Onboarding chat | `[friends, fitness]` |
 
-### Derived
+### 1.2 Private fields
 
-| Field | From |
+| Field | Label | Type | Required | Allowed values / validation | Set by | Example |
+| --- | --- | --- | --- | --- | --- | --- |
+| `birth_year` | Age | int | yes | Age 18–99, stored as a birth year. Used for the 18+ check and optional age-range matching. | Onboarding chat | `1992` (34) |
+| `phone` | Mobile number | E.164 text | yes | Australian mobile, verified by SMS. One account per number; VoIP and virtual numbers blocked. Shown to the owner masked: `+61 4•• ••• 678`. | Sign-up | `+61412345678` |
+| `travel_radius_km` | How far you'll travel | int | no | 2, 5, 10, 20 or 50. Default 10. | Onboarding chat | `10` |
+| `avoid` | Things to avoid | list | no | Any of Avoid (§1.5). Plans with these traits are held back from suggestions, with a count. | Onboarding chat | `[alcohol]` |
+| `availability` | Usually free | list | no | Any of Availability (§1.5). Used to rank plans by time. | Onboarding chat | `[wd-pm, we-am]` |
+| `asks_per_week` | Asks from Keen per week | int | no | 0, 1, 3, 5 or 7. Default 3. Caps the "might be keen" asks they receive. | You | `3` |
+| `blocked_user_ids` | Blocked people | list | no | Set by blocking. Mutual and silent. | Report or block | – |
+
+### 1.3 Calculated fields (public unless noted)
+
+| Field | Label | Calculated from | Rule | Example |
+| --- | --- | --- | --- | --- |
+| `member_since` | Member since | Sign-up date | Shown as month and year. | `Mar 2025` |
+| `verification` | Verification | Checks | `phone` (always), `photo` (always), `id` (optional). Shown as badges; the documents never are. | phone, photo, id |
+| `goodwill` | Goodwill | The Goodwill ledger (§1.4) | Sum of ledger entries, never below 0. | `5,020` |
+| `goodwill_level` | Goodwill level | Goodwill | New 0–199 · Regular 200–999 · Trusted 1,000–2,999 · Local legend 3,000+. | `Local legend` |
+| `events_attended` | Plans attended | Confirmed attendance (§9) | Counted only once someone who was there confirms it. | `48` |
+| `events_hosted` | Plans hosted | Confirmed attendance | Plans they organised that went ahead. | `6` |
+| `hosting_rating` | Hosting rating | Event ratings (§10) | Average stars for plans they hosted, shown after 3 hosted plans. People themselves are never rated with stars. | `4.9` |
+| `no_shows` | No-shows | Reports (§9) | Only counted when 2 people who were there report it. | `0` |
+| `positive_tags` | What people say | Feedback (§10) | Count per positive tag, plus the number of positive reviews. Negative tags are never shown. | `On time 75, Friendly 66, …` |
+| `activity_counts` | Plans per activity | Confirmed attendance | Attended plans per activity. Sums to `events_attended`. This is all that others see of someone's history. | `Padel 25, Surfing 14, Running 9` |
+| `played_with` | Played with you | Co-attendance | Viewer-specific: "Played with you 2×". Private to the two people involved. | `2` |
+
+### 1.4 Goodwill ledger
+
+Every change is a ledger row (`user_id`, `delta`, `reason`, `event_id`, `created_at`). The rules:
+
+| Reason | Points |
 | --- | --- |
-| `events_attended`, `events_hosted` | Confirmed attendance (§9). |
-| `no_shows`, `late_cancels` | Attendance and leave records (§9, §10). |
-| `rating_avg`, `rating_count` | Event ratings on events they hosted. |
-| `positive_tags` | Counts of positive feedback tags received (§10). Negative tags are never shown. |
-| `activity_counts` | Attended events per activity. This is what other people see of someone's history (§11). |
-| `played_with` | Co-attendance edges (§3). Private to the person. |
+| Attended a plan (confirmed by someone who was there) | +50 |
+| Left feedback after a plan | +20 |
+| Good review received (max 3 per plan) | +10 each |
+| Hosted a plan where 3 or more came | +100 |
+| ID verified (once) | +100 |
+| No-show (reported by 2 or more attendees) | −150 |
+| 3 late cancels in 30 days | −50 |
+
+A typical plan earns about 90 points (attend, give feedback, get 2 good reviews), which is what the level thresholds assume.
+
+New-level limits (under 200): can join plans, at most 3 invites a day, and can't host plans over 6 people without ID.
+
+### 1.5 Allowed values
+
+**Levels:** one vocabulary everywhere (profiles, plans, search, onboarding). The onboarding chat accepts plain words and maps them.
+
+| id | Label | Meaning | Plain words that map to it |
+| --- | --- | --- | --- |
+| `beginner` | Beginner | New to it or still learning the basics | never tried, new, learning, rusty, 1–3/10 |
+| `casual` | Casual | Knows the rules, plays for fun | social, for fun, okay, average, 4–5/10 |
+| `intermediate` | Intermediate | Plays regularly and holds their own | decent, pretty good, solid, 6–7/10 |
+| `competitive` | Competitive | Plays to win, in leagues or comps | competitive, advanced, played for years, 8–10/10 |
+
+**Activities:** grouped into the three tag families from the original notes. Synonyms map to one tag.
+
+| Family | Activities (id) |
+| --- | --- |
+| Sports | Padel (`padel`), Tennis (`tennis`), Pickleball (`pickleball`), Squash (`squash`), Football (`football`), Basketball (`basketball`), Beach volleyball (`volleyball`), Running (`running`), Cycling (`cycling`), Bouldering (`climbing`), Surfing (`surfing`), Ocean swim (`swimming`) |
+| Hobbies | Bushwalk (`hiking`), Local tour (`explore`), Board games (`boardgames`), Chess (`chess`), Photo walk (`photowalk`), Music jam (`jam`) |
+| Professional skills | Language exchange (`language`). Home fix-it (`diy`) exists as a tag but is blocked in the MVP. |
+
+**Goals** (up to 3): `fitness` Get fitter · `friends` Make new friends · `learn` Learn something new · `compete` Compete ·
+`outdoors` Get outdoors · `unwind` Unwind.
+
+**Avoid** (any), each with the plans it holds back:
+
+| id | Label | Holds back |
+| --- | --- | --- |
+| `water` | Water sports | Surfing and ocean swims |
+| `heights` | Heights | Bouldering and climbing |
+| `alcohol` | Alcohol and bars | Plans at licensed venues |
+| `contact` | Contact sports | Football and basketball |
+| `late` | Late nights | Plans that finish after 10pm |
+| `early` | Early starts | Plans that start before 7am |
+| `big` | Big groups | Plans for 8 or more people |
+
+**Availability** (any): `wd-am` Weekday mornings (Mon–Fri, before 12pm) · `wd-pm` Weekday afternoons and evenings
+(Mon–Fri, 12pm onwards) · `we-am` Weekend mornings · `we-pm` Weekend afternoons and evenings.
+
+**Positive tags:** On time · Friendly · Good sport · Skill as described · Would play again.
+**Negative tags** (review only): Late · Rude · Skill not as described · Made me uncomfortable · Asked for contact details.
+
+**Suburbs (prototype list):** Manly, Balgowlah, Freshwater, Dee Why, Mosman, Neutral Bay, Chatswood, Sydney CBD, Surry Hills,
+Newtown, Marrickville, Bondi, Bronte, Coogee, Parramatta.
+
+### 1.6 What each audience sees
+
+| | Anyone signed in | The person | Keen only |
+| --- | --- | --- | --- |
+| First name, photo, suburb, about, activities and levels, goals | ✓ | ✓ | |
+| Member since, verification badges, Goodwill and level | ✓ | ✓ | |
+| Plans attended, hosted, no-shows, hosting rating, positive tags, plans per activity | ✓ | ✓ | |
+| "Played with you" | the other person only | ✓ | |
+| Age, phone, travel distance, avoid list, free times, asks per week | | ✓ | ✓ |
+| Negative feedback, reports, blocked list | | | ✓ |
 
 ## 2. Event
 
