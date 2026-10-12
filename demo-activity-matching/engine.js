@@ -802,6 +802,20 @@ function mapsLinks(v) {
   };
 }
 
+// Add-to-calendar for a plan you're going to: a Google Calendar link and an .ics file. Only the venue's public
+// address goes in; the meeting point stays in the app.
+function calendarLinks(plan, slot, venue) {
+  const z = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const where = venue ? `${venue.name}, ${venue.address}` : plan.place;
+  const details = `Keen plan. Meeting point and chat are in the app.`;
+  const google = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(plan.title)}&dates=${z(slot.start)}/${z(slot.end)}&location=${encodeURIComponent(where)}&details=${encodeURIComponent(details)}`;
+  const esc = (t) => t.replace(/([,;\\])/g, '\\$1');
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Keen//Plans//EN', 'BEGIN:VEVENT', `UID:${plan.id}@keen.app`, `DTSTAMP:${z(new Date())}`,
+    `DTSTART:${z(slot.start)}`, `DTEND:${z(slot.end)}`, `SUMMARY:${esc(plan.title)}`, `LOCATION:${esc(where)}`, `DESCRIPTION:${esc(details)}`,
+    'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', `DESCRIPTION:${esc(plan.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+  return { google, ics };
+}
+
 // Screen chat messages for things scammers rely on: moving off-app and talking about money.
 const CHAT_PATTERNS = [
   { re: /(?:\+?61|\b0)[\s-]?4(?:[\s-]?\d){8}\b/g, label: 'phone number' },
@@ -830,5 +844,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { duplicatePlans, FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { calendarLinks, duplicatePlans, FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

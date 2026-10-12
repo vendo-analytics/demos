@@ -66,6 +66,39 @@ VIEWS.plan = ({ v: id }) => {
   </div>`;
 };
 
+function calendarHTML(g) {
+  const c = calendarLinks(g, slotOf(g, NOW), VENUE[g.venueId]);
+  return `<div class="cal-row"><span class="small muted">Add to calendar</span><a class="link-btn" href="${c.google}" target="_blank" rel="noopener">Google</a><a class="link-btn" href="data:text/calendar;charset=utf-8,${encodeURIComponent(c.ics)}" download="${esc(g.title.replace(/[^\w ]+/g, ''))}.ics">Apple / Outlook (.ics)</a></div>`;
+}
+
+// The check before joining: what you're signing up for, anything that doesn't fit, and a hello for the organiser.
+function joinSheet(v) {
+  const g = findPlan(v), org = PERSON[g.org], slot = slotOf(g, NOW);
+  const full = g.members.length >= g.size;
+  const label = full ? 'Join the waitlist' : g.approve ? 'Ask to join' : 'Join';
+  const mine = ME.levels && ME.levels[g.act];
+  const gap = mine && g.skill ? Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(g.skill)) : 0;
+  const clash = myBusy().find((b) => b.id !== g.id && b.start < slot.end && b.end > slot.start);
+  const avoid = planTraits(g, NOW).filter((t) => (ME.avoid || []).includes(t)).map((t) => AVOIDS.find((a) => a.id === t).label.toLowerCase());
+  const warns = [];
+  if (clash) warns.push(`You're going to <b>${esc(clash.title)}</b> at the same time.`);
+  if (gap >= 2) warns.push(`It's ${esc(levelLabel(g.skill).toLowerCase())} level and you said you're ${esc(levelLabel(mine).toLowerCase())} at ${esc(ACT[g.act].label.toLowerCase())}.`);
+  if (avoid.length) warns.push(`It involves ${esc(avoid.join(' and '))}, which you said you'd rather avoid.`);
+  S.joinHi = '';
+  sheet(`<div class="h3">${esc(label)}: ${esc(g.title)}</div>
+    <div class="ledger">
+      <div><span>When</span><b>${esc(fmtSlot(slot, NOW))}</b></div>
+      <div><span>Where</span><b>${esc(g.venue)}</b></div>
+      <div><span>Level</span><b>${esc(levelLabel(g.skill))}</b></div>
+      <div><span>${full ? 'Waitlist' : 'Spots'}</span><b>${full ? `you'd be #${(g.waitlist || []).length + 1}` : `${g.size - g.members.length} left`}</b></div>
+    </div>
+    ${warns.length ? `<div class="notice warn"><b>Before you join</b>${warns.map((w) => `<span>${w}</span>`).join('')}</div>` : ''}
+    ${g.approve && !full ? `<label class="eyebrow" for="joinHi">Say hi to ${esc(org.name)} (optional)</label><textarea id="joinHi" rows="2" maxlength="160" placeholder="e.g. I play most weekends, happy to rotate."></textarea><div id="hiWarn"></div>` : ''}
+    <p class="small muted" style="margin:0">${g.approve && !full ? `${esc(org.name)} confirms new people; you're in the chat meanwhile. ` : ''}The meeting point unlocks once you're in. Can't make it? Leave at least 24 hours before. A no-show costs 150 Goodwill.</p>
+    <button type="button" class="btn block" id="joinGo" data-act="join-confirm" data-v="${v}">${warns.length ? `${label} anyway` : label}</button>
+    <button type="button" class="btn block ghost" data-act="close-sheet">Not now</button>`);
+}
+
 function actionHTML(g, st, phase) {
   const id = g.id, org = PERSON[g.org];
   const left = g.size - g.members.length;
@@ -105,7 +138,7 @@ function actionHTML(g, st, phase) {
       <button type="button" class="btn block" data-act="join" data-v="${id}">${joinLabel}</button><button type="button" class="link-btn" data-act="uninterest" data-v="${id}" style="justify-self:center">Not interested any more</button>`;
   if (st === 'requested') return `<div class="notice warn"><b>Requested</b>${esc(org.name)} confirms new people. You're in the chat meanwhile.</div><button type="button" class="link-btn" data-act="unrequest" data-v="${id}" style="justify-self:center">Cancel request</button>`;
   if (st === 'waitlist') return `<div class="notice warn"><b>You're on the waitlist</b>If a spot opens you're in automatically, and we'll tell you.</div><button type="button" class="link-btn" data-act="unrequest" data-v="${id}" style="justify-self:center">Leave the waitlist</button>`;
-  if (st === 'going') return `<div class="notice info"><b>You're going</b>Check-in opens 30 minutes before the start. You'll get a reminder 2 hours before.</div><button type="button" class="link-btn" data-act="leave" data-v="${id}" style="justify-self:center;color:var(--flag)">Can't make it? Leave the plan</button>`;
+  if (st === 'going') return `<div class="notice info"><b>You're going</b>Check-in opens 30 minutes before the start. You'll get a reminder 2 hours before.</div>${calendarHTML(g)}<button type="button" class="link-btn" data-act="leave" data-v="${id}" style="justify-self:center;color:var(--flag)">Can't make it? Leave the plan</button>`;
   return '';
 }
 
@@ -400,9 +433,15 @@ Object.assign(ACTIONS, {
     render(true);
     toast("Done. You won't hear about this plan any more.");
   },
-  join: (v) => {
+  // Joining is two taps: the card or plan's button opens a short check, then this confirms.
+  join: (v) => joinSheet(v),
+  'join-hi': (v, el) => { S.joinHi = el.value; const w = $('#hiWarn'); const c = screenMessage(S.joinHi); if (w) w.innerHTML = c.hits.length ? noteWarnHTML(c) : ''; const b = $('#joinGo'); if (b) b.disabled = !!c.hits.length; },
+  'join-confirm': (v) => {
     const g = findPlan(v);
     const org = PERSON[g.org];
+    closeSheet();
+    const hi = (S.joinHi || '').trim();
+    S.joinHi = '';
     if (!g.interested.includes('me')) g.interested.push('me');
     if (g.members.length >= g.size) {
       S.mem[v] = 'waitlist';
@@ -411,6 +450,7 @@ Object.assign(ACTIONS, {
     } else if (g.approve) {
       S.mem[v] = 'requested';
       postSys(v, `${ME.name} asked to join`);
+      if (hi) msgsOf(v).push({ who: 'me', text: hi, at: new Date() });
       toast(`Request sent. ${org.name} confirms new people.`);
       after(3500, () => {
         if (S.mem[v] !== 'requested') return;
@@ -425,6 +465,7 @@ Object.assign(ACTIONS, {
       S.mem[v] = 'going';
       g.members.push('me');
       postSys(v, `${ME.name} joined`);
+      if (hi) msgsOf(v).push({ who: 'me', text: hi, at: new Date() });
       toast("You're going. The meeting point and chat are open.");
     }
     markRead(v);

@@ -527,6 +527,25 @@ and "Run it again" on a finished event.
 
 Directions are visible before joining (venue, address, transport). The **meeting point** is only shown to people in the thread.
 
+### 8.1 The check before joining
+
+Join, Ask to join and Join waitlist each open a short sheet first, so a stray tap on a card never commits anyone:
+
+- When, where, level, and spots left (or your place on the waitlist).
+- Warnings, none of which block: a **calendar clash** with a plan you're going to, hosting or have requested; a level
+  **two or more steps** from yours for that activity; a trait on your **avoid list** (only possible if you chose "Show"
+  on held-back plans). With a warning the button reads "Join anyway".
+- **Say hi** (approve mode only, optional, 160 characters): posted to the thread with the request. Screened like chat;
+  contact details or payment talk disable the button.
+- The commitments: the meeting point unlocks once you're in, leave at least 24 hours before, a no-show costs 150 Goodwill.
+
+### 8.2 Once you're going
+
+- **Add to calendar:** a Google Calendar link and an `.ics` file (Apple, Outlook) with a 2-hour alert. Only the title,
+  time and the venue's public address go in; the meeting point and people stay in the app.
+- A reminder 2 hours before, and check-in opens 30 minutes before (§9).
+- Leaving is in §10.
+
 ## 9. Mark attendance
 
 Attendance is what Goodwill is built on, so it always needs a second person.

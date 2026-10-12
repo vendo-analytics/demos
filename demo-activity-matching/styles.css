@@ -819,3 +819,5 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .venue-links { display: flex; gap: 14px; }
 .chip[disabled] { opacity: 0.35; cursor: default; }
 .preview-card { pointer-events: none; }
+.cal-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.sheet .notice span { display: block; }

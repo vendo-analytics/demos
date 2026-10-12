@@ -37,7 +37,7 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | History | Every plan you went to or hosted, totals by activity, and the people you've played with. |
 | Profile | Someone else's profile: counts per activity, "played with you", trust badges. |
 
-Login, photo checks and calendar sync are deliberately out of scope.
+Login, photo checks and two-way calendar sync are deliberately out of scope (adding a plan to your calendar works).
 
 **Photos.** Portraits and the padel and tennis photos are AI-generated for the demo: none of them show real people.
 Other activities use gradient art in their category's colours, and people without a photo show their initials. Both
@@ -201,7 +201,7 @@ Later: share-my-plan with a trusted contact, check-in at the venue, and age veri
 
 **In:** onboarding conversation (voice and text), ask box and parser, editable intent graph, posting plans, the "Happening near you" feed with private avoid filters, join approvals, matching (asks, plans, might-be-keen reach-out), suggested plans, limited profiles, invite and join requests, plan page with group chat and contact masking, feedback, Goodwill, report and block, saved asks with reach-out stats, "run it again".
 
-**Out (for now):** login (assume phone sign-in), photo and ID checks, calendar sync, payments, paid services and home help, 1:1 messaging, location tracking, check-ins, club and venue accounts.
+**Out (for now):** login (assume phone sign-in), photo and ID checks, two-way calendar sync, payments, paid services and home help, 1:1 messaging, location tracking (check-in is confirmed by people who are there), club and venue accounts.
 
 ## Open questions
 
