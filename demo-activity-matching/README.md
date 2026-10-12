@@ -21,7 +21,7 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Ask | Type anything, or tap an example. Watch the graph fill in, and tap a node to correct it. "Picked for you" sits under the box. |
 | Matches | Groups to join, people keen right now, a suggested plan that combines individuals, and the "might be keen" reach-out. |
 | No match | "Board games in Newtown tonight": the ask is saved and passed on, with a "widen radius" option. |
-| Explore | Recommendations with reasons, browse by day, browse by activity. Plans that clash with your avoid list are held back with a count. |
+| Explore | For you (recommendations with reasons), browse rows with their rules, by day, by activity, and a Map with venue pins and "Start one here". Plans that clash with your avoid list are held back with a count. |
 | Search | "padel this weekend": the query becomes removable filter chips. Try "padle" (typo), "footy" (local name), "padel 7am" (other times), "Mia" (people aren't searchable), "yoga" (no results, notify me), and the Filters button. |
 | Event page | Interested or join, directions with map links, "why you're seeing this" graph, who's going, thread preview. |
 | Thread | Ask "where do we meet?" or "what do I bring?" and the organiser answers. Reply to a message. Type a phone number to see it hidden. |

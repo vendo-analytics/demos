@@ -49,7 +49,7 @@ const ICON_CLOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" 
 const ICON_PIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/></svg>';
 const ICON_BELL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>';
 
-const EX_BLANK = () => ({ q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false });
+const EX_BLANK = () => ({ q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false, view: 'list', mapR: null, pin: null });
 const SEARCH_EXAMPLES = ['padel this weekend', 'running before work', 'beginner tennis', 'board games tonight', 'something sunday morning'];
 const WHEN_FILTERS = [['today', 'Today'], ['tomorrow', 'Tomorrow'], ['this weekend', 'This weekend'], ['next 7 days', 'Next 7 days']];
 const SORTS = [['best', 'Best match'], ['soon', 'Soonest'], ['near', 'Nearest']];
@@ -235,30 +235,119 @@ function filtersSheet() {
 const setFilter = (k, v) => { S.ex[k] = v; updateExplore(); filtersSheet(); };
 
 function exploreHomeHTML() {
-  const { shown, hidden } = rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow() });
+  const seg = `<div class="seg wide" role="group" aria-label="View">${[['list', 'List'], ['map', 'Map']].map(([k, l]) => `<button type="button" data-act="ex-view" data-v="${k}" aria-pressed="${S.ex.view === k}">${l}</button>`).join('')}</div>`;
+  return `${seg}${S.ex.view === 'map' ? mapViewHTML() : browseListHTML()}`;
+}
+
+// A smaller card for browse rows: image, title, when and spots. The full card (with reasons) is for "For you" and search.
+function miniCard(x, why) {
+  const g = x.plan, left = g.size - g.members.length;
+  return `<button type="button" class="mcard" data-act="plan" data-v="${g.id}">
+    <span class="mcard-media">${actArt(g.act)}<span class="pill-glass">${esc(ACT[g.act].label)}</span></span>
+    <span class="mcard-body"><b>${esc(g.title)}</b><span class="small muted">${esc(fmtSlot(x.slot, NOW))}</span><span class="small muted">${esc(g.venue.replace(/\s*\(.*\)$/, ''))}</span>
+    <span class="row small"><span class="stack">${g.members.slice(0, 3).map((m) => avatar(PERSON[m], 's')).join('')}</span><span class="grow"></span><span style="${left <= 2 && left > 0 ? 'color:var(--flag);font-weight:600' : ''}" class="${left > 2 ? 'muted' : ''}">${left <= 0 ? 'Full' : `${left} left`}</span></span></span>
+  </button>`;
+}
+
+function browseListHTML() {
+  const ctx = ctxNow();
+  const { shown, hidden } = rankFeed(ME, openEvents(), { now: NOW, ctx });
   const recs = shown.filter((x) => !myStatus(x.plan));
-  const weekend = recs.filter((x) => [0, 6].includes(x.slot.start.getDay()) && (x.slot.start - NOW) / 864e5 < 7);
-  const idx = browseIndex(ME, openEvents(), NOW, ctxNow());
+  const top = recs.slice(0, 6);
+  const seen = new Set(top.map((x) => x.plan.id));
+  const idx = browseIndex(ME, openEvents(), NOW, ctx);
   const days = Array.from({ length: 7 }, (_, i) => +startOfDay(new Date(+NOW + i * 864e5)));
-  const acts = ACTIVITIES.filter((a) => a.cat !== 'service');
-  const withPlans = acts.filter((a) => idx.byAct[a.id]).sort((a, b) => idx.byAct[b.id] - idx.byAct[a.id]);
-  const without = acts.filter((a) => !idx.byAct[a.id]);
+  const cols = browseCollections(ME, openEvents().filter((g) => !myStatus(g)), { now: NOW, ctx });
+  const colHTML = cols.map((c) => {
+    const rest = c.items.filter((x) => !seen.has(x.plan.id));
+    const items = rest.length ? rest : c.items;
+    const see = c.see ? `<button type="button" class="link-btn" data-act="ex-see" data-v="${c.id}">See all ${c.items.length}</button>` : `<span class="small muted num">${c.items.length}</span>`;
+    return `<div class="section-h"><h3 class="h3">${esc(c.title)}</h3>${see}</div><p class="small muted sub-h">${esc(c.why)}</p>
+      <div class="carousel minis">${items.map((x) => miniCard(x)).join('')}</div>`;
+  }).join('');
+  const groups = [...new Set(ACTIVITIES.filter((a) => a.cat !== 'service').map((a) => a.group))];
+  const actHTML = groups.map((grp) => {
+    const acts = ACTIVITIES.filter((a) => a.group === grp && a.cat !== 'service').sort((a, b) => (idx.byAct[b.id] || 0) - (idx.byAct[a.id] || 0));
+    return `<div class="eyebrow grp-h">${esc(grp)}</div>
+      <div class="carousel tiles">${acts.map((a) => `<button type="button" class="tile${idx.byAct[a.id] ? '' : ' empty-tile'}" data-act="ex-act" data-v="${a.id}">${actArt(a.id)}<span class="tile-label">${esc(a.label)}<small>${idx.byAct[a.id] ? plural(idx.byAct[a.id], 'plan') : 'None yet'}</small></span></button>`).join('')}</div>`;
+  }).join('');
   return `${savedSearchesHTML()}
     <div class="section-h"><h3 class="h3">For you</h3><span class="small muted">${plural(recs.length, 'plan')}</span></div>
-    <div class="carousel">${recs.slice(0, 6).map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>
+    <div class="carousel">${top.map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>
     ${hiddenNoteHTML(hidden, 'ex-hidden')}
-    ${weekend.length ? `<div class="section-h"><h3 class="h3">This weekend</h3><span class="small muted">${plural(weekend.length, 'plan')}</span></div>
-    <div class="carousel">${weekend.map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>` : ''}
-    <div class="section-h"><h3 class="h3">Browse by activity</h3></div>
-    <div class="carousel tiles">${withPlans.map((a) => `<button type="button" class="tile" data-act="ex-act" data-v="${a.id}">${actArt(a.id)}<span class="tile-label">${esc(a.label)}<small>${plural(idx.byAct[a.id], 'plan')}</small></span></button>`).join('')}</div>
-    ${without.length ? `<p class="small muted" style="margin:0">Nothing nearby yet for ${esc(without.slice(0, 4).map((a) => a.label.toLowerCase()).join(', '))}${without.length > 4 ? ` and ${without.length - 4} more` : ''}. <button type="button" class="link-btn" data-act="tab" data-v="ask">Ask for it</button> or <button type="button" class="link-btn" data-act="create">start one</button>.</p>` : ''}
+    ${colHTML}
     <div class="section-h"><h3 class="h3">Browse by day</h3><span class="small muted">within ${ME.radius || 10} km</span></div>
-    <div class="day-strip">${days.map((d) => `<button type="button" class="day" data-act="ex-day" data-v="${d}" ${idx.byDay[d] ? '' : 'disabled'}><span class="small muted">${new Date(d).toLocaleDateString('en-AU', { weekday: 'short' })}</span><b class="num">${new Date(d).getDate()}</b><span class="small num" style="color:var(--flag)">${idx.byDay[d] || ''}</span></button>`).join('')}</div>`;
+    <div class="day-strip">${days.map((d, i) => `<button type="button" class="day${i === 0 ? ' today' : ''}" data-act="ex-day" data-v="${d}" ${idx.byDay[d] ? '' : 'disabled'} aria-label="${fmtDay(new Date(d), NOW)}, ${plural(idx.byDay[d] || 0, 'plan')}"><span class="small muted">${i === 0 ? 'Today' : new Date(d).toLocaleDateString('en-AU', { weekday: 'short' })}</span><b class="num">${new Date(d).getDate()}</b><span class="small num" style="color:var(--flag)">${idx.byDay[d] || ''}</span></button>`).join('')}</div>
+    <div class="section-h"><h3 class="h3">Browse by activity</h3></div>
+    ${actHTML}
+    <p class="small muted" style="margin:0">Nothing for what you want? <button type="button" class="link-btn" data-act="tab" data-v="ask">Ask for it</button> or <button type="button" class="link-btn" data-act="create">start one</button>.</p>`;
+}
+
+// ---------- map ----------
+// A schematic map around your home suburb: suburbs as labels, venues as pins sized by open plans,
+// your travel radius as a ring. Pins that would overlap are grouped; zoom in with the distance chips.
+
+function mapViewHTML() {
+  const R = S.ex.mapR || ME.radius || 10;
+  const home = PLACE[ME.suburb];
+  const W = 360, H = 360, ring = 150, k = ring / R;
+  const cos = Math.cos((home.lat * Math.PI) / 180);
+  const xy = (p) => [W / 2 + (p.lng - home.lng) * 111.32 * cos * k, H / 2 - (p.lat - home.lat) * 110.57 * k];
+  const inView = ([x, y]) => x > 8 && x < W - 8 && y > 8 && y < H - 8;
+  const idx = browseIndex(ME, openEvents(), NOW, ctxNow(), R * 1.3);
+  // group pins that would overlap at this zoom
+  const clusters = [];
+  for (const v of [...VENUES].sort((a, b) => (idx.byVenue[b.id] || 0) - (idx.byVenue[a.id] || 0))) {
+    const p = xy(v);
+    if (!inView(p)) continue;
+    const c = clusters.find((c) => Math.hypot(c.x - p[0], c.y - p[1]) < 24);
+    if (c) { c.ids.push(v.id); c.n += idx.byVenue[v.id] || 0; } else clusters.push({ x: p[0], y: p[1], ids: [v.id], n: idx.byVenue[v.id] || 0 });
+  }
+  const sel = S.ex.pin;
+  const labels = PLACES.filter((p) => p.name !== ME.suburb).map((p) => [p, xy(p)]).filter(([, q]) => inView(q))
+    .map(([p, [x, y]]) => `<text class="map-sub" x="${x.toFixed(1)}" y="${(y + 22).toFixed(1)}" text-anchor="middle">${esc(p.name)}</text>`).join('');
+  const pins = clusters.map((c) => {
+    const key = c.ids.join(',');
+    const v = VENUE[c.ids[0]];
+    const [g1, g2] = ART[ACT[v.acts[0]].cat] || ART.service;
+    const r = c.n ? Math.min(20, 11 + c.n * 1.6) : 5;
+    return `<g class="map-pin${c.n ? '' : ' none'}${sel === key ? ' sel' : ''}" data-act="ex-pin" data-v="${key}" role="button" aria-label="${esc(c.ids.length > 1 ? `${c.ids.length} venues` : v.name)}, ${plural(c.n, 'plan')}">
+      <circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${r}" fill="${c.n ? `url(#mg-${c.ids[0]})` : 'var(--muted)'}"/>
+      ${c.n ? `<defs><linearGradient id="mg-${c.ids[0]}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${g1}"/><stop offset="1" stop-color="${g2}"/></linearGradient></defs><text x="${c.x.toFixed(1)}" y="${(c.y + 4.5).toFixed(1)}" text-anchor="middle" class="map-n">${c.n}</text>` : ''}
+    </g>`;
+  }).join('');
+  const rings = [R / 2, R].map((d) => `<circle cx="${W / 2}" cy="${H / 2}" r="${d * k}" class="map-ring"/><text x="${W / 2 + d * k * 0.707 + 4}" y="${H / 2 - d * k * 0.707 - 4}" class="map-km">${d} km</text>`).join('');
+  const svg = `<svg class="map" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of plans within ${R} km of ${esc(ME.suburb)}">
+    <rect width="${W}" height="${H}" class="map-bg"/>${rings}${labels}
+    <circle cx="${W / 2}" cy="${H / 2}" r="14" class="map-halo"/><circle cx="${W / 2}" cy="${H / 2}" r="6.5" class="map-me"/>
+    <text x="${W / 2}" y="${H / 2 + 26}" text-anchor="middle" class="map-home">${esc(ME.suburb)}</text>${pins}</svg>`;
+  const zoom = `<div class="chips">${[2, 5, 10, 20].map((d) => `<button type="button" class="chip" data-act="ex-mapr" data-v="${d}" aria-pressed="${R === d}">${d} km</button>`).join('')}</div>`;
+  return `${zoom}<div class="map-card">${svg}</div>${sel ? pinPanelHTML(sel, R) : '<p class="small muted" style="margin:0">Tap a pin to see what\'s on there. Numbers are open plans. Grey dots are venues with nothing on yet.</p>'}`;
+}
+
+function pinPanelHTML(key, R) {
+  const ids = key.split(',').filter((id) => VENUE[id]);
+  const home = PLACE[ME.suburb];
+  const plans = openEvents().filter((g) => ids.includes(g.venueId) && !g.past && g.status !== 'cancelled' && g.visibility !== 'invite' && eventPhase(g, NOW) !== 'done' && !touchesBlocked(g, ctxNow()));
+  const items = plans.map((g) => scoreEvent(ME, g, ctxNow(), NOW)).sort((a, b) => a.slot.start - b.slot.start);
+  const venuesHTML = ids.map((id) => {
+    const v = VENUE[id];
+    const n = items.filter((x) => x.plan.venueId === id).length;
+    const links = mapsLinks(v);
+    return `<div class="pin-venue"><span class="grow"><b>${esc(v.name)}</b><small class="muted">${esc(v.address)} · ${km(v, home).toFixed(1)} km${v.alcohol ? ' · licensed' : ''}</small></span>
+      ${n ? `<span class="small muted num">${plural(n, 'plan')}</span>` : `<button type="button" class="link-btn" data-act="ex-start-here" data-v="${id}">Start one here</button>`}
+      <a class="link-btn" href="${links.apple}" target="_blank" rel="noopener">Directions</a></div>`;
+  }).join('');
+  return `<div class="card pin-panel">
+    <div class="row"><b class="grow">${ids.length > 1 ? `${ids.length} venues here` : esc(VENUE[ids[0]].name)}</b>${ids.length > 1 && R > 2 ? `<button type="button" class="link-btn" data-act="ex-mapr" data-v="${R > 5 ? 5 : 2}">Zoom in</button>` : ''}<button type="button" class="link-btn" data-act="ex-pin" data-v="">Close</button></div>
+    ${venuesHTML}
+    ${items.length ? `<div class="carousel minis">${items.map((x) => miniCard(x)).join('')}</div>` : ''}
+  </div>`;
 }
 
 
 Object.assign(ACTIONS, {
-  'ex-clear': () => { const sort = S.ex.sort; S.ex = { ...EX_BLANK(), sort }; render(); },
+  'ex-clear': () => { const { sort, view, mapR } = S.ex; S.ex = { ...EX_BLANK(), sort, view, mapR }; render(); },
   'ex-act': (v) => { S.ex.act = S.ex.act === v ? null : v; updateExplore(); $('#screen').scrollTop = 0; },
   'ex-day': (v) => { S.ex.day = S.ex.day === +v ? null : +v; updateExplore(); $('#screen').scrollTop = 0; },
   'ex-q': (v) => { S.ex.q = v; S.ex.drop = {}; rememberSearch(v); const i = $('#exInput'); if (i) { i.value = v; i.blur(); } S.ex.focus = false; updateExplore(); },
@@ -292,6 +381,20 @@ Object.assign(ACTIONS, {
     updateExplore();
   },
   'ex-run-saved': (i) => { const x = S.savedSearches[+i]; S.ex = { ...EX_BLANK(), q: x.q, act: x.act, when: x.when, radius: x.radius, level: x.level, spots: x.spots, open: x.open }; render(); },
+  'ex-view': (v) => { S.ex.view = v; S.ex.pin = null; updateExplore(); },
+  'ex-mapr': (v) => { S.ex.mapR = +v; S.ex.pin = null; updateExplore(); },
+  'ex-pin': (v) => { S.ex.pin = S.ex.pin === v || !v ? null : v; updateExplore(); },
+  'ex-start-here': (id) => {
+    const v = VENUE[id];
+    S.draft = Object.assign(blankDraft(), { preferVenue: id, placeName: v.suburb });
+    go('compose');
+    if (v.acts.length === 1) ACTIONS['d-act'](v.acts[0]);
+  },
+  'ex-see': (id) => {
+    const c = COLLECTIONS.find((x) => x.id === id);
+    S.ex = { ...EX_BLANK(), view: S.ex.view, mapR: S.ex.mapR, ...c.see };
+    render();
+  },
   'ex-hidden': () => { S.showHidden = !S.showHidden; if (view().name === 'explore') updateExplore(); else updatePreview(); },
   'ex-post': () => {
     const it = parseIntent(S.ex.q || '', ME.suburb, NOW);

@@ -130,7 +130,10 @@ VIEWS.compose = () => {
   const d = S.draft;
   if (!d.act) {
     const groups = {};
-    ACTIVITIES.filter((a) => a.cat !== 'service').forEach((a) => (groups[a.group] ||= []).push(a));
+    const at = VENUE[d.preferVenue];
+    // From a venue on the map: what that venue suits comes first
+    if (at) groups[`At ${at.name}`] = at.acts.map((id) => ACT[id]);
+    ACTIVITIES.filter((a) => a.cat !== 'service' && !(at && at.acts.includes(a.id))).forEach((a) => (groups[at ? `Somewhere else: ${a.group.toLowerCase()}` : a.group] ||= []).push(a));
     return bar('Create a plan') + `<div class="pad">
       <div><p class="eyebrow">New plan</p><h1 class="h1">What are you organising?</h1></div>
       ${Object.entries(groups).map(([gname, acts]) => `<p class="small muted" style="margin:0">${gname}</p><div class="tile-grid">${acts.map((a) => `<button type="button" class="tile" data-act="d-act" data-v="${a.id}">${actArt(a.id)}<span class="tile-label">${esc(a.label)}</span></button>`).join('')}</div>`).join('')}
@@ -306,7 +309,9 @@ Object.assign(ACTIONS, {
     d.skill = (ME.levels && ME.levels[v]) || 'casual';
     d.venues = venuesFor(v, d.placeName);
     d.venueId = null;
-    if (d.venues.length === 1) pickVenue(d.venues[0]);
+    // Started from a venue on the map: keep that venue if it suits the activity
+    if (d.preferVenue && VENUE[d.preferVenue].acts.includes(v)) { d.venues = [d.preferVenue, ...d.venues.filter((x) => x !== d.preferVenue)]; pickVenue(d.preferVenue); }
+    else if (d.venues.length === 1) pickVenue(d.venues[0]);
     autoTitle();
     render();
   },

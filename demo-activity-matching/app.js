@@ -32,7 +32,7 @@ const S = {
   ratings: {}, // RATED edges from feedback you gave: person -> 'good' | 'bad' (private)
   gsel: null,
   rc: null,
-  ex: { q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false },
+  ex: { q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false, view: 'list', mapR: null, pin: null },
   searchRecent: [],
   savedSearches: [],
   hidden: new Set(),
@@ -598,7 +598,9 @@ const NOTES = {
     body: `<ul>
       <li><b>For you</b> ranks open plans by how you connect to them in the graph: activities you list and actually turn up to, distance, whether it fits your free time, your level, people you've played with who are going, how close it is to filling, and the organiser's Goodwill.</li>
       <li>Plans that clash with your private avoid list are held back, with a count and a way to show them.</li>
-      <li><b>Browse by day</b> and <b>by activity</b> show counts within your travel radius, so empty categories are visible instead of hidden.</li>
+      <li>Browse rows have fixed rules, shown under each title: next 48 hours, this weekend, needs one or two more, good for beginners, after work. "See all" opens search with that filter.</li>
+      <li><b>Browse by day</b> and <b>by activity</b> show counts within your travel radius. Activities with nothing on are greyed, not hidden.</li>
+      <li><b>Map</b> pins venues with the number of open plans; close pins group until you zoom in. A venue has directions and "Start one here". People are never on the map.</li>
       <li>You can browse and search events. You can never browse or search people.</li>
     </ul>`,
   },
@@ -793,7 +795,8 @@ const FLOWS = [
   ['Ask', () => { S.onboarding = false; S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
   ['Matches', () => { S.text = EXAMPLES[0]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && (S.result.people.length || S.result.plans.length)],
   ['No match', () => { S.text = EXAMPLES[4]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && !S.result.people.length && !S.result.plans.length],
-  ['Explore', () => { S.ex = EX_BLANK(); setTab('explore'); }, (n) => n === 'explore' && !searching()],
+  ['Explore', () => { S.ex = EX_BLANK(); setTab('explore'); }, (n) => n === 'explore' && !searching() && S.ex.view !== 'map'],
+  ['Map', () => { S.ex = { ...EX_BLANK(), view: 'map' }; setTab('explore'); }, (n) => n === 'explore' && !searching() && S.ex.view === 'map'],
   ['Search', () => { S.ex = { ...EX_BLANK(), q: 'padel this weekend' }; setTab('explore'); }, (n) => n === 'explore' && searching()],
   ['Event page', () => { S.tab = 'explore'; S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
   ['Thread', () => { if (!myStatus(findPlan('g1'))) ACTIONS.interest('g1'); S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'g1' }, { name: 'thread', v: 'g1' }]; render(); }, (n) => n === 'thread'],

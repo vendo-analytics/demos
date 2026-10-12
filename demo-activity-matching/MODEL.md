@@ -373,10 +373,53 @@ The log is never shown to anyone and isn't linked to a profile in any report.
 
 ## 5. Browse
 
-- **By day:** the next 7 days, with the count of open events within the travel radius.
-- **By activity:** grouped by Sports, Hobbies and Professional skills, with counts. Activities with nothing nearby are
-  shown greyed out rather than hidden, so people can see what's missing and ask for it.
-- Browse never lists people.
+Browse shows **what exists near you** by fixed, explainable rules. Recommendations (§6) decide what to push; browse
+doesn't rank by person, so it's also how people find plans outside their usual interests.
+
+### 5.1 What's included
+
+Open, public plans within the travel radius of the home suburb that haven't finished. Cancelled plans, invite-only
+plans and plans involving someone blocked (either way) are left out. Counts include plans you've joined and plans that
+clash with your avoid list; the rows of cards don't.
+
+### 5.2 Collections
+
+Each row has a rule, shown under its title. Cards are ordered soonest first. A plan already in the top of **For you**
+isn't repeated in a row unless it's the only one, and rows that map onto a search filter have **See all N**, which
+opens search with that filter as a chip.
+
+| Row | Rule | See all |
+|---|---|---|
+| Happening now | Started, or starts within 30 minutes | — |
+| Next 48 hours | Starts within two days | When: tomorrow |
+| This weekend | Saturday or Sunday in the next 7 days | When: this weekend |
+| Needs one or two more | 1–2 spots left | — |
+| Good for beginners | Beginner level, or a clinic or lesson | Level: beginner |
+| After work | Weekdays from 5pm | "after work" (the next 7 days) |
+
+Empty rows are hidden.
+
+### 5.3 By day and by activity
+
+- **By day:** the next 7 days, today first, each with the count of open plans. Days with none are disabled.
+- **By activity:** one row per group (Sports, Hobbies, Professional skills), busiest first. Activities with nothing
+  nearby are shown greyed out with "None yet" rather than hidden. Tapping one opens search for it, where an empty result
+  offers post, ask or notify me.
+
+### 5.4 Map
+
+- A schematic map centred on the home suburb: suburbs as labels, the travel radius and half of it as rings, venues as
+  pins. A pin shows the number of open plans; grey dots are venues with nothing on.
+- Zoom is a distance choice (2, 5, 10, 20 km). Pins closer than about 24 px at the current zoom are grouped into one
+  pin with the total. Tapping a group lists its venues, with "Zoom in".
+- A venue shows its address, distance, whether it's licensed, its plans as cards, a Directions link (Apple or Google
+  Maps), and "Start one here", which opens Create with the venue set and its activities first.
+- Production uses a real map (MapKit or Mapbox) with the same pins and grouping. Only venues are pinned; people's
+  locations are never on the map.
+
+### 5.5 Privacy
+
+Browse never lists people. Faces on a card are the people going to that plan, shown by first name only.
 
 ## 6. Recommendations
 

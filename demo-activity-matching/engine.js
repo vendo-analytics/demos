@@ -476,7 +476,7 @@ function goalFit(goals, plan, act, venue) {
 function rankFeed(profile, plans, opts = {}) {
   const now = opts.now || new Date();
   const ctx = opts.ctx || { played: {}, actCount: {} };
-  const radius = profile.radius || 10;
+  const radius = opts.radius || profile.radius || 10;
   const shown = [], hidden = [];
   for (const plan of plans) {
     if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id)) || touchesBlocked(plan, ctx)) continue;
@@ -683,19 +683,40 @@ function searchSuggest(text, profile, plans, opts = {}) {
   return out.sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 6);
 }
 
-// Browse: how many open events per activity and per day for the next week.
-function browseIndex(profile, plans, now = new Date(), ctx = null) {
-  const byAct = {}, byDay = {};
+// Browse: how many open events per activity, per day (next 7 days) and per venue, within a radius of home.
+// Counts include plans you'd avoid or have joined: browse shows what exists, recommendations decide what to push.
+function browseIndex(profile, plans, now = new Date(), ctx = null, radius = null) {
+  const byAct = {}, byDay = {}, byVenue = {};
   const home = PLACE[profile.suburb] || PLACE[ME.suburb];
+  const r = radius || profile.radius || 10;
   for (const plan of plans) {
     if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done' || touchesBlocked(plan, ctx)) continue;
     const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
-    if (km(home, venue || PLACE[plan.place]) > (profile.radius || 10)) continue;
+    if (km(home, venue || PLACE[plan.place]) > r) continue;
     byAct[plan.act] = (byAct[plan.act] || 0) + 1;
     const d = +startOfDay(slotOf(plan, now).start);
     byDay[d] = (byDay[d] || 0) + 1;
+    if (plan.venueId) byVenue[plan.venueId] = (byVenue[plan.venueId] || 0) + 1;
   }
-  return { byAct, byDay };
+  return { byAct, byDay, byVenue };
+}
+
+// Browse collections: fixed, explainable rules over open plans near you (not a personal ranking; that's §6).
+// Each one says why a plan is in it, and the ones that map onto a search filter get a "See all".
+const COLLECTIONS = [
+  { id: 'now', title: 'Happening now', why: 'Started or starting within 30 minutes', test: (x, now) => eventPhase(x.plan, now) === 'live' },
+  { id: 'soon', title: 'Next 48 hours', why: 'Starts in the next two days', test: (x, now) => eventPhase(x.plan, now) === 'upcoming' && x.slot.start - now < 2 * 864e5, see: { when: 'tomorrow' } },
+  { id: 'weekend', title: 'This weekend', why: 'Saturday or Sunday', test: (x, now) => [0, 6].includes(x.slot.start.getDay()) && x.slot.start - now < 7 * 864e5, see: { when: 'this weekend' } },
+  { id: 'needs', title: 'Needs one or two more', why: 'One or two spots left, so your yes makes it happen', test: (x) => x.left >= 1 && x.left <= 2 },
+  { id: 'beginners', title: 'Good for beginners', why: 'Beginner level, or a clinic or lesson', test: (x) => x.plan.skill === 'beginner' || /clinic|learn|lesson|basics/i.test(x.plan.title), see: { level: 'beginner' } },
+  { id: 'evenings', title: 'After work', why: 'Weekdays from 5pm', test: (x) => x.slot.start.getDay() % 6 !== 0 && hourOf(x.slot.start) >= 17, see: { q: 'after work' } },
+];
+
+function browseCollections(profile, plans, opts = {}) {
+  const now = opts.now || new Date();
+  const { shown } = rankFeed(profile, plans, { now, ctx: opts.ctx, radius: opts.radius });
+  const soonest = [...shown].sort((a, b) => a.slot.start - b.slot.start);
+  return COLLECTIONS.map((c) => ({ ...c, items: soonest.filter((x) => c.test(x, now)) })).filter((c) => c.items.length);
 }
 
 // ---------- the other direction: which people a plan reaches ----------
@@ -769,5 +790,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }
