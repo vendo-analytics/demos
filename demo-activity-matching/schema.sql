@@ -104,6 +104,8 @@ create table events (
   capacity             int not null check (capacity between 2 and 30),
   join_mode            text not null default 'approve' check (join_mode in ('approve', 'open')),
   visibility           text not null default 'public' check (visibility in ('public', 'invite')),
+  repeat_weekly        boolean not null default false,
+  series_id            uuid,                         -- shared by every week of a repeating plan
   status               event_status not null default 'open',
   traits               text[] not null default '{}',  -- derived on write: activity traits + licensed venue + late/early/big
   time_bucket          text not null,                 -- derived: wd-am | wd-pm | we-am | we-pm

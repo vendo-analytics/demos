@@ -489,23 +489,31 @@ it is.
 ## 7. Create an event
 
 Entry points: the ask box ("Post as a plan", offered first when the text names a fixed time, a venue or "we're 4"), the
-**Create** button in Explore and Plans, and "Run it again" on a finished event.
+**Create** button in Explore and Plans, "Start one here" on a venue in the map (§5.4), "Post a plan" on an empty search,
+and "Run it again" on a finished event.
 
-1. **Activity**, picked first when starting from scratch.
-2. **Day and start time.** From an ask, only times inside the asked window are offered.
-3. **Venue**, from public venues for that activity, nearest first. Licensed venues are marked.
-4. **Directions.** Picking the venue prefills:
-   - **Meeting point** (`default_meeting_point`), editable, and required.
+1. **Activity**, picked first when starting from scratch. From a venue, that venue's activities come first.
+2. **Day and start time.** Today is offered while a start time at least an hour away is left; earlier times are greyed.
+   From an ask, only times inside the asked window are offered. Duration 1, 1.5, 2 or 3 hours.
+3. **Venue**, from public venues for that activity, nearest first, each with its distance. Licensed venues are marked.
+   Picking one shows a venue card: name, address, distance, and Apple Maps and Google Maps links (coordinates only).
+4. **Already on?** Once activity, day, time and venue are set, Keen looks for the same activity within 2 km and within
+   30 minutes either side. If there is one, it's shown as a card ("a full game beats two half games") and posting needs
+   one tap on **Post mine anyway**. Changing the day, time or venue asks again.
+5. **Directions.** Picking the venue prefills:
+   - **Meeting point** (`default_meeting_point`), editable, and required. Only people in the thread see it.
    - **Getting there** (`transport` + `parking`), editable.
-   - The address, with a map link. Directions links carry only the venue's coordinates.
-5. **Spots:** "we are" plus "looking for" gives the capacity. **Level**, **details** and **what to bring**.
-6. **Join mode:** "I confirm who joins" is on by default.
-7. **Reach preview:** how many people with a matching ask are told now, how many might-be-keen people will hear (within
+6. **Spots:** "we are" plus "looking for" gives the capacity. **Level**, **details** and **what to bring**.
+7. **Join mode:** "I confirm who joins" is on by default. **Repeat every Friday** (off by default): each week is posted
+   7 days ahead as its own plan with its own thread, and last week's people are told first.
+8. **Reach preview:** how many people with a matching ask are told now, how many might-be-keen people will hear (within
    their weekly cap), and the radius it shows in Explore.
-8. **Rules:**
-   - All text is screened. Contact details or payment talk block posting.
-   - Events over 6 people need ID verification or 100+ Goodwill.
-   - The organiser must be 18+ and phone-verified.
+9. **Preview:** the card exactly as it will appear in Explore.
+10. **Rules** (the button says which one is unmet):
+    - Starts at least 1 hour from now and within 60 days.
+    - All text is screened. Contact details or payment talk block posting.
+    - Events over 6 people need ID verification or the Regular level (200+ Goodwill).
+    - The organiser must be 18+ and phone-verified.
 
 ## 8. Join an event
 

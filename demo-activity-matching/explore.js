@@ -30,7 +30,7 @@ function eventCard(x, opts = {}) {
     <div class="ecard-body">
       <div class="row"><span class="stack">${faces}</span><span class="small muted grow">${g.members.length} going${(g.interested || []).length ? ` · ${g.interested.length} interested` : ''}</span><span class="small ${left <= 2 && left > 0 ? '' : 'muted'}" style="${left <= 2 && left > 0 ? 'color:var(--flag);font-weight:600' : ''}">${full ? 'Full' : `${left} left`}</span></div>
       ${reasonsHTML([...x.reasons, ...clashText.map((t) => ({ ok: false, text: t }))].slice(0, opts.short ? 3 : 5))}
-      <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)}</span>${gw(org.points)}</span><span class="row" style="gap:6px">${opts.feedback ? `<button type="button" class="icon-btn more-btn" data-act="rec-menu" data-v="${g.id}" aria-label="Options for ${esc(g.title)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>` : ''}${cta}</span></div>
+      <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)}</span>${gw(personPts(org))}</span><span class="row" style="gap:6px">${opts.feedback ? `<button type="button" class="icon-btn more-btn" data-act="rec-menu" data-v="${g.id}" aria-label="Options for ${esc(g.title)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>` : ''}${cta}</span></div>
     </div>
   </article>`;
 }

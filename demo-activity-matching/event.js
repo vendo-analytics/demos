@@ -50,7 +50,7 @@ VIEWS.plan = ({ v: id }) => {
     <div class="row small">${avatar(org, 's')}<span class="grow">${g.org === 'me' ? 'Organised by you' : `Organised by <b>${esc(org.name)}</b>`}</span>${g.org !== 'me' ? gw(org.points) : ''}</div>
     ${actionHTML(g, st, phase)}
     <div class="meta">
-      <div><span class="k">When</span><span>${esc(fmtSlot(slot, NOW))}</span></div>
+      <div><span class="k">When</span><span>${esc(fmtSlot(slot, NOW))}${g.repeat ? `<br><span class="small muted">Every ${cap(DOW[slot.start.getDay()])}</span>` : ""}</span></div>
       <div><span class="k">Level</span><span>${cap(g.skill)}</span></div>
       <div><span class="k">Spots</span><span class="row">${spots(g.members.length, g.size)}<span class="small muted num">${phase === 'done' ? `${g.members.length} came` : left > 0 ? `${left} left` : 'full'}</span></span></div>
       ${g.bring ? `<div><span class="k">Bring</span><span>${esc(g.bring)}</span></div>` : ''}

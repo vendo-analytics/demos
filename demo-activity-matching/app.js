@@ -664,7 +664,9 @@ const NOTES = {
       <li>The same screen edits a plan you host. Everything can change except the activity once someone else has joined, and spots can't drop below the number going. Everyone in the plan gets a thread message listing what changed.</li>
       <li><b>Who can find it</b>: anyone nearby (Explore, search and suggestions) or only people you invite.</li>
       <li>Start from an ask ("Post as a plan"), from Explore or from the Plans tab. Starting fresh asks for the activity first.</li>
-      <li><b>Directions</b>: picking a venue fills in the meeting point and how to get there (transport and parking), and both can be edited. The address links to a map.</li>
+      <li><b>Directions</b>: picking a venue shows its card with distance and Apple and Google Maps links, and fills in the meeting point and how to get there (transport and parking). Both can be edited.</li>
+      <li><b>Already on?</b> If the same activity is on within 2 km around the same time, Keen shows it and asks you to tap "Post mine anyway". Try football, Friday, 6pm, Manly Oval.</li>
+      <li>Today is offered while there's a start time at least an hour away. A plan can repeat weekly. The preview shows the card as it will appear in Explore.</li>
       <li>A plan is an ask made specific: a fixed start time, a public venue and spots to fill. Typing "Football Friday 6pm at Manly Oval, we're 4, need 7" offers this flow first.</li>
       <li>Venues come from a list of public places. Licensed venues are marked, and people who avoid alcohol never see those plans.</li>
       <li>Before you post you see who it reaches: people with a matching ask are told now, people who might be keen hear about it within their weekly cap, and it appears in the feed for people nearby.</li>

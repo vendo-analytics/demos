@@ -10,11 +10,13 @@ function venuesFor(act, near) {
 }
 
 function blankDraft() {
-  const days = Array.from({ length: 7 }, (_, i) => +startOfDay(new Date(+NOW + (i + 1) * 864e5)));
+  // Today too, if there's still a start time at least an hour away
+  const todayOk = START_TIMES.some((h) => +at(NOW, h) >= +NOW + 36e5);
+  const days = Array.from({ length: 7 }, (_, i) => +startOfDay(new Date(+NOW + (todayOk ? i : i + 1) * 864e5)));
   return {
     act: null, raw: '', days, day: null, window: [7, 21], start: null, dur: 1.5, venues: [], venueId: null, placeName: ME.suburb,
     have: 1, seek: 3, skill: 'casual', note: '', bring: '', meet: '', meetEdited: false, directions: '', dirEdited: false,
-    approve: true, visibility: 'public', title: '', titleEdited: false, editingId: null,
+    approve: true, visibility: 'public', repeat: false, dupOk: false, title: '', titleEdited: false, editingId: null,
   };
 }
 
@@ -92,13 +94,41 @@ function draftCheck(d) {
   if (!d.act) why = 'Pick an activity';
   else if (d.day == null) why = 'Pick a day';
   else if (d.start == null) why = 'Pick a start time';
+  else if (!d.editingId && +at(new Date(d.day), d.start) < +NOW + 36e5) why = 'Start at least an hour from now';
   else if (!d.venueId) why = 'Pick a venue';
   else if (!d.meet.trim()) why = 'Add a meeting point';
   else if (!d.title.trim()) why = 'Give it a title';
   else if (scan.hits.length) why = 'Fix the text to post';
   else if (sizeBlocked) why = 'Verify ID to post a plan this big';
+  else if (!d.editingId && !d.dupOk && draftDuplicates(d).length) why = 'Check the plan already on';
   else if (d.editingId && size < findPlan(d.editingId).members.length) why = `${findPlan(d.editingId).members.length} are already going`;
   return { ok: !why, why, scan, size, sizeBlocked };
+}
+
+const draftDuplicates = (d) => (d.act && d.day != null && d.start != null && d.venueId ? duplicatePlans(draftPlan(d), allEvents(), NOW) : []);
+
+function duplicatesHTML(d) {
+  const dups = draftDuplicates(d);
+  if (!dups.length) return '';
+  const items = dups.map((g) => scoreEvent(ME, g, ctxNow(), NOW));
+  return `<div class="notice ${d.dupOk ? 'info' : 'warn'}"><b>${dups.length === 1 ? 'Something like this is already on' : `${dups.length} like this are already on`}</b>
+    <span>Same activity, close by, around the same time. Joining fills it up, and a full game beats two half games.</span></div>
+    <div class="carousel minis">${items.map((x) => miniCard(x)).join('')}</div>
+    ${d.dupOk ? '<p class="small muted" style="margin:0">Posting yours as well.</p>' : '<button type="button" class="btn block ghost" data-act="d-dup-ok">Post mine anyway</button>'}`;
+}
+
+// What the plan will look like in Explore, from the draft.
+function draftPreviewHTML(d) {
+  if (!d.act || d.day == null || d.start == null || !d.venueId) return '';
+  const g = { ...draftPlan(d), title: d.title || 'Untitled', venue: VENUE[d.venueId].name, interested: [], approve: d.approve, note: d.note };
+  const x = { plan: g, slot: g.slots[0], reasons: [{ ok: true, text: `${cap(d.skill)} level` }, ...(d.repeat ? [{ ok: true, text: `Every ${cap(DOW[new Date(d.day).getDay()])}` }] : [])], clash: [] };
+  return `<section class="field"><h3 class="h3">Preview</h3><div class="preview-card" inert>${eventCard(x, { short: true })}</div></section>`;
+}
+
+function venueCardHTML(v) {
+  const l = mapsLinks(v), dist = km(v, PLACE[ME.suburb]);
+  return `<div class="venue-card"><span class="venue-pin">${ICON_PIN}</span><span class="grow"><b>${esc(v.name)}</b><small class="muted">${esc(v.address)} · ${dist < 0.8 ? `in ${esc(v.suburb)}` : `${dist.toFixed(1)} km away`}${v.alcohol ? ' · licensed' : ''}</small></span>
+    <span class="venue-links"><a class="link-btn" href="${l.apple}" target="_blank" rel="noopener">Apple Maps</a><a class="link-btn" href="${l.google}" target="_blank" rel="noopener">Google Maps</a></span></div>`;
 }
 
 function noteWarnHTML(scan) {
@@ -155,12 +185,13 @@ VIEWS.compose = () => {
     <div><div class="row"><p class="eyebrow grow">${esc(act.label)} · ${editing ? 'editing' : 'new plan'}</p>${othersIn ? '' : '<button type="button" class="link-btn" data-act="d-act" data-v="">Change</button>'}</div>
       <input id="draftTitle" class="title-input" value="${esc(d.title)}" maxlength="60" aria-label="Plan title"></div>
     <section class="field"><h3 class="h3">Day</h3><div class="chips">${d.days.map((x) => `<button type="button" class="chip" data-act="d-day" data-v="${x}" aria-pressed="${d.day === x}">${esc(fmtDay(new Date(x), NOW))}</button>`).join('')}</div></section>
-    <section class="field"><h3 class="h3">Starts</h3><div class="chips">${times.map((h) => `<button type="button" class="chip num" data-act="d-start" data-v="${h}" aria-pressed="${d.start === h}">${fmtHourLabel(h)}</button>`).join('')}</div>
+    <section class="field"><h3 class="h3">Starts</h3><div class="chips">${times.map((h) => `<button type="button" class="chip num" data-act="d-start" data-v="${h}" aria-pressed="${d.start === h}" ${d.day != null && !editing && +at(new Date(d.day), h) < +NOW + 36e5 ? 'disabled' : ''}>${fmtHourLabel(h)}</button>`).join('')}</div>
       <p class="eyebrow">For</p><div class="chips">${[1, 1.5, 2, 3].map((h) => `<button type="button" class="chip" data-act="d-dur" data-v="${h}" aria-pressed="${d.dur === h}">${h === 1 ? '1 hour' : `${h} hours`}</button>`).join('')}</div></section>
     <section class="field"><h3 class="h3">Where</h3><p class="small muted" style="margin:0">Public places only: courts, ovals, beaches, cafés, libraries.</p>
-      <div class="chips">${d.venues.map((id) => `<button type="button" class="chip" data-act="d-venue" data-v="${id}" aria-pressed="${d.venueId === id}">${esc(VENUE[id].name)}${VENUE[id].alcohol ? ' · licensed' : ''}</button>`).join('') || '<span class="small muted">No listed venues for this yet.</span>'}</div></section>
+      <div class="chips">${d.venues.map((id) => `<button type="button" class="chip" data-act="d-venue" data-v="${id}" aria-pressed="${d.venueId === id}">${esc(VENUE[id].name.replace(/\s*\(.*\)$/, ''))} <span class="muted num">${km(VENUE[id], PLACE[ME.suburb]).toFixed(1)} km</span>${VENUE[id].alcohol ? ' · licensed' : ''}</button>`).join('') || '<span class="small muted">No listed venues for this yet.</span>'}</div>
+      ${v ? venueCardHTML(v) : ''}</section>
+    ${editing ? '' : duplicatesHTML(d)}
     ${v ? `<section class="field"><h3 class="h3">Directions</h3>
-      <div class="small muted">${esc(v.address)} · <a href="${mapsLinks(v).google}" target="_blank" rel="noopener">Check it on a map</a></div>
       <label class="eyebrow" for="draftMeet">Meeting point</label><input id="draftMeet" class="text-input" value="${esc(d.meet)}" maxlength="80" placeholder="e.g. North end, by the nets">
       <label class="eyebrow" for="draftDir">Getting there</label><textarea id="draftDir" rows="3" maxlength="300">${esc(d.directions)}</textarea>
       <p class="small muted" style="margin:0">Everyone sees the venue and address. The meeting point only shows to people who are interested or going.</p></section>` : ''}
@@ -171,6 +202,7 @@ VIEWS.compose = () => {
       <label class="eyebrow" for="draftBring">What to bring</label><input id="draftBring" class="text-input" value="${esc(d.bring)}" maxlength="80" placeholder="e.g. Racquet and water">
       <div id="noteWarn">${noteWarnHTML(c.scan)}</div></section>
     <label class="toggle"><input type="checkbox" id="draftApprove" data-act="d-approve" ${d.approve ? 'checked' : ''}>I confirm who joins</label>
+    ${d.day != null ? `<label class="toggle"><input type="checkbox" data-act="d-repeat" ${d.repeat ? 'checked' : ''}>Repeat every ${cap(DOW[new Date(d.day).getDay()])}</label>` : ''}
     <section class="field"><h3 class="h3">Who can find it</h3><span class="seg"><button type="button" data-act="d-vis" data-v="public" aria-pressed="${d.visibility === 'public'}">Anyone nearby</button><button type="button" data-act="d-vis" data-v="invite" aria-pressed="${d.visibility === 'invite'}">Only people I invite</button></span></section>
     ${editing ? `<p class="small muted" style="margin:0">Everyone going or interested gets a message in the thread listing what changed.</p>` : `<div class="card"><p class="eyebrow">When you post</p><div class="ledger">
       <div><span>People who asked for this, told now</span><b class="num">${reach.asked.length}</b></div>
@@ -179,6 +211,7 @@ VIEWS.compose = () => {
       <div><span>Shown in Explore and search within</span><b class="num">${d.visibility === 'invite' ? '–' : `${ME.radius || 10} km`}</b></div>
     </div></div>`}
     ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or the Regular level (200+ Goodwill). Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or the Regular level (200+ Goodwill). You have ${fmtPts(S.points)}.</p>` : ''}
+    ${draftPreviewHTML(d)}
     <div id="publishWrap">${publishBtnHTML()}</div>
   </div>`;
 };
@@ -234,6 +267,7 @@ const EVENT_FIELDS = [
   { key: 'directions', field: 'directions', label: 'Getting there', by: 'organiser', rule: 'Up to 300 characters. Prefilled with transport and parking from the venue.', value: (g) => esc(g.directions || '–') },
   { key: 'bring', field: 'bring', label: 'What to bring', by: 'organiser', rule: 'Up to 80 characters.', value: (g) => esc(g.bring || '–') },
   { key: 'starts', field: 'starts_at / ends_at', label: 'When', by: 'organiser', required: true, rule: 'Starts at least 1 hour from now and within 60 days. Lasts 1, 1.5, 2 or 3 hours.', value: (g) => esc(fmtSlot(slotOf(g, NOW), NOW)) },
+  { key: 'repeat', field: 'repeat', label: 'Repeats', by: 'organiser', rule: "Weekly or not. Each week is its own plan, posted 7 days ahead with its own thread; the people from last week get first refusal.", value: (g) => (g.repeat ? `Every ${cap(DOW[slotOf(g, NOW).start.getDay()])}` : 'No') },
   { key: 'size', field: 'capacity', label: 'Spots', by: 'organiser', required: true, rule: '2 to 30, including the organiser and anyone they bring. Can\'t go below the number already going. Over 6 needs ID or the Regular level.', value: (g) => String(g.size) },
   { key: 'approve', field: 'join_mode', label: 'Joining', by: 'organiser', required: true, rule: 'approve (organiser confirms, the default) or open (anyone joins straight away).', value: (g) => (g.approve ? 'Organiser confirms' : 'Open') },
   { key: 'visibility', field: 'visibility', label: 'Who can find it', by: 'organiser', required: true, rule: 'public (Explore, search and suggestions nearby) or invite (only people invited).', value: (g) => (g.visibility === 'invite' ? 'Only people invited' : 'Anyone nearby') },
@@ -315,17 +349,19 @@ Object.assign(ACTIONS, {
     autoTitle();
     render();
   },
-  'd-day': (v) => { S.draft.day = +v; autoTitle(); render(true); },
-  'd-start': (v) => { S.draft.start = +v; render(true); },
+  'd-day': (v) => { S.draft.day = +v; S.draft.dupOk = false; if (S.draft.start != null && +at(new Date(+v), S.draft.start) < +NOW + 36e5) S.draft.start = null; autoTitle(); render(true); },
+  'd-start': (v) => { S.draft.start = +v; S.draft.dupOk = false; render(true); },
   'd-dur': (v) => { S.draft.dur = +v; render(true); },
-  'd-venue': (v) => { pickVenue(v); render(true); },
+  'd-venue': (v) => { S.draft.dupOk = false; pickVenue(v); render(true); },
   'd-skill': (v) => { S.draft.skill = v; render(true); },
   'd-party': (v) => {
     const [k, n] = v.split(':');
     S.draft[k] = Math.min(k === 'have' ? 4 : 20, Math.max(1, S.draft[k] + +n));
     render(true);
   },
-  'd-approve': (v, el) => { S.draft.approve = el.checked; },
+  'd-approve': (v, el) => { S.draft.approve = el.checked; render(true); },
+  'd-repeat': (v, el) => { S.draft.repeat = el.checked; render(true); },
+  'd-dup-ok': () => { S.draft.dupOk = true; render(true); },
   'd-vis': (v) => { S.draft.visibility = v; render(true); },
   publish: () => {
     const d = S.draft;
@@ -339,7 +375,7 @@ Object.assign(ACTIONS, {
       id, mine: true, posted: true, org: 'me', act: d.act, title: d.title.trim(), venueId: v.id, venue: v.name, place: v.suburb, alcohol: !!v.alcohol,
       meet: d.meet.trim(), directions: d.directions.trim(), bring: d.bring.trim(), note: d.note.trim(),
       slots: [{ start: at(day, d.start), end: at(day, d.start + d.dur) }], members: ['me', ...FRIENDS.slice(0, d.have - 1).map((f) => f.id)], interested: [],
-      size: d.have + d.seek, skill: d.skill, approve: d.approve, status: 'open', visibility: d.visibility,
+      size: d.have + d.seek, skill: d.skill, approve: d.approve, status: 'open', visibility: d.visibility, repeat: d.repeat ? 'weekly' : null,
       sent: reach.asked.length + reach.likely.length, seen: 0, keen: 0, passed: 0, requests: [], clonedFrom: d.clonedFrom || null,
     };
     S.myPlans.unshift(plan);

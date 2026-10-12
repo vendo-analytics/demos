@@ -747,6 +747,18 @@ function browseCollections(profile, plans, opts = {}) {
   return COLLECTIONS.map((c) => ({ ...c, items: soonest.filter((x) => c.test(x, now)) })).filter((c) => c.items.length);
 }
 
+// Before posting: the same activity already on nearby at an overlapping time. Joining it beats splitting the group.
+function duplicatePlans(draft, plans, now = new Date()) {
+  const slot = slotOf(draft, now);
+  const here = (typeof VENUE !== 'undefined' && VENUE[draft.venueId]) || PLACE[draft.place];
+  return plans.filter((g) => {
+    if (g.id === draft.id || g.org === 'me' || g.past || g.status === 'cancelled' || g.act !== draft.act || eventPhase(g, now) === 'done') return false;
+    const s = slotOf(g, now);
+    const there = (typeof VENUE !== 'undefined' && VENUE[g.venueId]) || PLACE[g.place];
+    return s.start < new Date(+slot.end + 30 * 60e3) && s.end > new Date(+slot.start - 30 * 60e3) && (g.venueId === draft.venueId || km(here, there) <= 2);
+  });
+}
+
 // ---------- the other direction: which people a plan reaches ----------
 
 // Walks the same edges from the plan's side. Each person is checked against their own private fields
@@ -818,5 +830,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { duplicatePlans, FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }
