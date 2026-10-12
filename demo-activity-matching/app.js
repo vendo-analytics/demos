@@ -32,7 +32,9 @@ const S = {
   ratings: {}, // RATED edges from feedback you gave: person -> 'good' | 'bad' (private)
   gsel: null,
   rc: null,
-  ex: { q: '', act: null, day: null, drop: {} },
+  ex: { q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false },
+  searchRecent: [],
+  savedSearches: [],
   hidden: new Set(),
   myAsks: MY_ASKS.map((a) => ({ ...a })),
   myPlans: [...MY_HOSTED],
@@ -603,11 +605,12 @@ const NOTES = {
   search: {
     title: 'Search is the ask parser',
     body: `<ul>
-      <li>The search box uses the same plain-English parser as the ask box. "padel this weekend" becomes an activity filter and a time filter, shown as chips you can remove.</li>
-      <li>Only what you actually typed becomes a filter. Your profile level and home suburb are used for ranking, not to narrow results.</li>
-      <li>Words that aren't a known activity fall back to matching titles and descriptions ("photo", "trivia").</li>
-      <li>Similar activities appear in their own section (tennis when you search pickleball).</li>
-      <li>No results is never a dead end: post the plan yourself or save it as an ask.</li>
+      <li>The box uses the same plain-English parser as Ask. "padel this weekend" becomes removable chips. Only what you typed narrows results; your profile ranks them.</li>
+      <li>Typos and local names are repaired: try "padle", "tenis" or "footy". Time and level words never become text filters, so "tonight" or "something sunday morning" just work.</li>
+      <li>"before work" with no day means the next 7 days. "manly oval" filters to the venue. "padel within 2km" sets the distance.</li>
+      <li>Typeahead shows activities, venues and suburbs with how many plans each has. Filters (the button by the box) adds when, distance, level, spots left and join straight away. Sort by best, soonest or nearest.</li>
+      <li>Zero is never a dead end: "padel 7am" shows padel at other times, "surf in bondi" shows surfing further away, "yoga" is logged as demand.</li>
+      <li>Try "Mia": people can't be searched, and it says so. "Notify me" saves a private search that tells you when a matching plan is posted.</li>
     </ul>`,
   },
   thread: {
@@ -790,8 +793,8 @@ const FLOWS = [
   ['Ask', () => { S.onboarding = false; S.text = ''; S.over = {}; setTab('ask'); }, (n) => n === 'ask'],
   ['Matches', () => { S.text = EXAMPLES[0]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && (S.result.people.length || S.result.plans.length)],
   ['No match', () => { S.text = EXAMPLES[4]; S.over = {}; runSearch(); }, (n) => n === 'results' && S.result && !S.result.people.length && !S.result.plans.length],
-  ['Explore', () => { S.ex = { q: '', act: null, day: null, drop: {} }; setTab('explore'); }, (n) => n === 'explore' && !searching()],
-  ['Search', () => { S.ex = { q: 'padel this weekend', act: null, day: null, drop: {} }; setTab('explore'); }, (n) => n === 'explore' && searching()],
+  ['Explore', () => { S.ex = EX_BLANK(); setTab('explore'); }, (n) => n === 'explore' && !searching()],
+  ['Search', () => { S.ex = { ...EX_BLANK(), q: 'padel this weekend' }; setTab('explore'); }, (n) => n === 'explore' && searching()],
   ['Event page', () => { S.tab = 'explore'; S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
   ['Thread', () => { if (!myStatus(findPlan('g1'))) ACTIONS.interest('g1'); S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'g1' }, { name: 'thread', v: 'g1' }]; render(); }, (n) => n === 'thread'],
   ['Create event', () => { S.tab = 'activity'; S.stack = []; startComposeBlank(); }, (n) => n === 'compose'],
@@ -848,7 +851,7 @@ function init() {
     if (e.target.id === 'draftNote') { S.draft.note = e.target.value; composeLive(); }
   });
   phone.addEventListener('keydown', (e) => {
-    if (e.target.id === 'exInput' && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    if (e.target.id === 'exInput' && (e.key === 'Enter' || e.key === 'Escape')) { e.preventDefault(); e.target.blur(); }
     if (e.target.id === 'askInput' && e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       const it = currentIntent();

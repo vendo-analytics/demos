@@ -161,24 +161,29 @@ function parseTime(text, now = new Date()) {
 
   let assumed = false;
   if (!days) {
-    if (from != null) {
-      // a time with no day: today if it hasn't passed, else tomorrow
+    if (exact) {
+      // a clock time with no day: today if it hasn't passed, else tomorrow
       days = [at(today, to) > now ? today : addDays(today, 1)];
       dayLabel = fmtDay(days[0], now);
+    } else if (from != null) {
+      // a part of the day with no day ("before work", "mornings") is a habit, not a date: the next 7 days
+      days = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(today, i));
+      dayLabel = 'Next 7 days';
     } else {
       days = [0, 1, 2, 3, 4, 5, 6].map((i) => addDays(today, i));
       dayLabel = 'Next 7 days';
       assumed = true;
     }
   }
-  if (from == null) { from = 7; to = 21; hourLabel = days.length === 1 ? 'any time' : null; }
+  const anyHour = from == null;
+  if (anyHour) { from = 7; to = 21; hourLabel = days.length === 1 ? 'any time' : null; }
   // "Sunday 8am" said on Sunday evening means next Sunday
   if (byWeekday && at(days[0], to) <= now) days = [addDays(days[0], 7)];
   if (byWeekday && !dayLabel) dayLabel = fmtDay(days[0], now);
 
   const slots = days.map((d) => ({ start: at(d, from), end: at(d, to) })).filter((s) => s.end > now);
   const label = [dayLabel, hourLabel].filter(Boolean).join(' · ');
-  return { slots: slots.length ? slots : days.map((d) => ({ start: at(d, from), end: at(d, to) })), label, assumed, recurring, exact, from, to };
+  return { slots: slots.length ? slots : days.map((d) => ({ start: at(d, from), end: at(d, to) })), label, assumed, recurring, exact, anyHour, from, to };
 }
 
 function parseParty(t, act) {
@@ -221,7 +226,7 @@ function parseIntent(raw, home = ME.suburb, now = new Date()) {
     }
     if (place.assumed && /\b(near me|nearby|around here|local)\b/.test(t)) place.assumed = false;
     const r = t.match(/\bwithin\s+(\d+)\s*(?:km|kms|k)\b/) || t.match(/\b(\d+)\s*km\b/);
-    if (r) place.radius = Math.min(50, Math.max(1, +r[1]));
+    if (r) { place.radius = Math.min(50, Math.max(1, +r[1])); place.radiusSet = true; }
   }
 
   const time = parseTime(t, now);
@@ -484,41 +489,198 @@ function rankFeed(profile, plans, opts = {}) {
   return { shown, hidden };
 }
 
-// Search events (never people). The query goes through the same parser as asks; only what the
-// person actually said becomes a filter. Without a recognised activity it falls back to words in titles and notes.
+// ---------- search ----------
+
+// Words that never become a text filter: they are time, level, place or filler words the parser already
+// handled (or that carry no meaning in a search). Without this, "tennis tonight" would look for the word "tonight".
+const SEARCH_STOP = new Set(('a an the in at on of for to and or with near nearby me my i im i\'m we us our this next some any ' +
+  'play playing want wanna like keen looking look find get go going join someone something anything stuff people person ' +
+  'game games session sessions plan plans event events group who what where when around here local within km kms ' +
+  'today tonight tomorrow tmrw week weekend weekends weekday weekdays weeknight weeknights day days night nights ' +
+  'morning mornings afternoon afternoons arvo evening evenings lunch lunchtime before after work early sunrise dawn all ' +
+  'am pm from till until between beginner beginners newbie casual social relaxed chill intermediate advanced ' +
+  'competitive serious level levels learn learning lessons new more two three four five six seven eight nine ten').split(' '));
+
+// Things people call an activity that Keen files under another one. Shown as "Showing football for footy".
+const SEARCH_ALIASES = {
+  footy: 'football', rugby: 'football', touch: 'football', oztag: 'football', netball: 'basketball', bball: 'basketball',
+  badminton: 'tennis', 'table tennis': 'pickleball', boulder: 'climbing', paddleboard: 'surfing', sup: 'surfing',
+  bodyboard: 'surfing', trail: 'running', walking: 'hiking', walks: 'hiking', cards: 'boardgames', mahjong: 'boardgames',
+  scrabble: 'boardgames', camera: 'photowalk', music: 'jam', band: 'jam', sing: 'jam', conversation: 'language',
+};
+
+// Edit distance with swaps counted as one edit, so "padle" is one step from "padel".
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+// A word that isn't an activity, but nearly is: a typo, a plural or a local name for it.
+function guessActivity(words) {
+  for (const w of words) {
+    const alias = SEARCH_ALIASES[w];
+    if (alias) return { act: ACT[alias], from: w, kind: 'alias' };
+  }
+  const single = ACTIVITIES.flatMap((a) => a.words.filter((x) => !x.includes(' ') && x.length >= 4).map((x) => [x, a]));
+  for (const w of words) {
+    if (w.length < 4) continue;
+    for (const [x, a] of single) if (w === x + 's' || w === x + 'es' || x === w + 's') return { act: a, from: w, kind: 'plural' };
+  }
+  let best = null;
+  for (const w of words) {
+    if (w.length < 5) continue;
+    for (const [x, a] of single) {
+      const dist = editDistance(w, x);
+      if (dist <= (w.length >= 7 ? 2 : 1) && (!best || dist < best.dist)) best = { act: a, from: w, kind: 'typo', dist };
+    }
+  }
+  return best;
+}
+
+const FIRST_NAMES = () => new Set([...PEOPLE, ...FRIENDS].map((p) => p.name.toLowerCase()));
+
+// Search events (never people). The query goes through the same parser as asks, and only what the
+// person actually typed becomes a filter: their profile is used to rank, not to narrow.
+// Pipeline: parse -> repair (typos, aliases) -> filter -> bucket (exact / similar / held back) -> rank -> fallback.
 function searchEvents(text, profile, plans, opts = {}) {
   const now = opts.now || new Date();
-  const it = parseIntent(text || '', profile.suburb, now);
+  const q = (text || '').trim();
+  const it = parseIntent(q, profile.suburb, now);
   const f = opts.filters || {};
-  const act = f.act !== undefined ? f.act : it.activity ? it.activity.id : null;
-  const place = f.place !== undefined ? f.place : it.place.assumed ? null : it.place.remote ? null : it.place.name;
-  const radius = f.radius || (place ? it.place.radius : profile.radius || 10);
+  const lower = ' ' + q.toLowerCase().replace(/[’`]/g, "'") + ' ';
+
+  // Leftover words: whatever the parser didn't turn into a filter
+  const placeWords = new Set(PLACES.flatMap((p) => [...p.name.toLowerCase().split(' '), ...(p.alias || []).flatMap((x) => x.split(' '))]));
+  const venueWords = new Set(it.venue ? it.venue.name.toLowerCase().split(/[^a-z]+/) : []);
+  const actWords = new Set(it.activity ? it.activity.heard.split(' ') : []);
+  let rest = lower.split(/[^a-z']+/).filter((w) => w.length > 1 && !SEARCH_STOP.has(w) && !DOW.includes(w) && !(w in DOW_ABBR) && !placeWords.has(w) && !venueWords.has(w) && !actWords.has(w));
+
+  // Repair: typos ("padle"), plurals ("hikes") and local names ("footy")
+  let corrected = null;
+  let guessed = null;
+  if (!it.activity && f.act === undefined) {
+    guessed = guessActivity(rest);
+    if (guessed) { corrected = guessed.kind === 'plural' ? null : { from: guessed.from, to: guessed.act.label, kind: guessed.kind }; rest = rest.filter((w) => w !== guessed.from); }
+  }
+
+  // People are never searchable. A first name on its own gets an explanation instead of a silent zero.
+  const names = FIRST_NAMES();
+  const peopleQuery = rest.find((w) => names.has(w)) || null;
+  if (peopleQuery) rest = rest.filter((w) => !names.has(w));
+
+  const act = f.act !== undefined ? f.act : it.activity ? it.activity.id : guessed ? guessed.act.id : null;
+  const venue = f.venue !== undefined ? f.venue : it.venue ? it.venue.id : null;
+  const place = f.place !== undefined ? f.place : venue || it.place.assumed || it.place.remote ? null : it.place.name;
+  // f.radius: a number from the filters sheet, null when the typed "within N km" was removed
+  const typedRadius = f.radius !== null && it.place.radiusSet;
+  const radiusSet = !!f.radius || typedRadius;
+  const radius = f.radius || (typedRadius || place ? it.place.radius : profile.radius || 10);
   const time = f.time !== undefined ? f.time : it.time.assumed ? null : it.time;
-  const skill = f.skill !== undefined ? f.skill : it.skill && !it.skillFromProfile ? it.skill : null;
-  const stop = new Set(['a', 'an', 'the', 'in', 'at', 'on', 'for', 'to', 'and', 'with', 'near', 'me', 'this', 'next', 'some', 'any', 'play', 'want', 'i']);
-  const words = act ? [] : (text || '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2 && !stop.has(w) && !DOW.includes(w));
+  const skill = f.skill !== undefined ? f.skill : it.skill || null;
+  const words = act || f.words === null ? [] : rest;
   const centre = PLACE[place || profile.suburb] || PLACE[ME.suburb];
-  const exact = [], similar = [], hidden = [];
+
+  // One plan against the current filters; `relax` names a filter to ignore when looking for near misses.
+  const passes = (plan, slot, dist, relax) => {
+    if (relax !== 'place' && venue && plan.venueId !== venue) return false;
+    if (relax !== 'place' && dist > radius) return false;
+    if (relax !== 'time' && time && !time.slots.some((s) => (time.anyHour ? +startOfDay(s.start) === +startOfDay(slot.start) : s.start < slot.end && s.end > slot.start))) return false;
+    if (relax !== 'time' && f.day != null && +startOfDay(slot.start) !== f.day) return false;
+    if (relax !== 'skill' && skill && plan.skill !== skill && plan.skill !== 'casual') return false;
+    if (f.spots && plan.members.length >= plan.size) return false;
+    if (f.open && plan.approve) return false;
+    return true;
+  };
+  const matchesText = (plan) => {
+    if (act) return plan.act === act ? 'exact' : ACT[plan.act].cat === ACT[act].cat ? 'similar' : null;
+    if (!words.length) return peopleQuery ? null : 'exact';
+    const hay = `${plan.title} ${plan.note || ''} ${ACT[plan.act].label} ${ACT[plan.act].words.join(' ')} ${plan.venue}`.toLowerCase();
+    return words.every((w) => hay.includes(w.replace(/s$/, ''))) ? 'exact' : null;
+  };
+
+  const exact = [], similar = [], hidden = [], near = { time: [], place: [], skill: [] };
   for (const plan of plans) {
     if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done' || touchesBlocked(plan, opts.ctx)) continue;
-    const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
-    if (km(centre, venue || PLACE[plan.place]) > radius) continue;
+    const kind = matchesText(plan);
+    if (!kind) continue;
+    const v = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
     const slot = slotOf(plan, now);
-    if (time && !time.slots.some((s) => s.start < slot.end && s.end > slot.start)) continue;
-    if (f.day != null && +startOfDay(slot.start) !== f.day) continue;
-    if (skill && plan.skill !== skill && plan.skill !== 'casual') continue;
-    let bucket = null;
-    if (act) bucket = plan.act === act ? exact : ACT[plan.act].cat === ACT[act].cat ? similar : null;
-    else if (words.length) {
-      const hay = `${plan.title} ${plan.note || ''} ${ACT[plan.act].label} ${plan.venue}`.toLowerCase();
-      bucket = words.some((w) => hay.includes(w)) ? exact : null;
-    } else bucket = exact;
-    if (!bucket) continue;
+    const dist = km(centre, v || PLACE[plan.place]);
+    if (!passes(plan, slot, dist)) {
+      // Near misses for the exact activity, so "padel 7am" can offer padel at other times
+      if (kind === 'exact') for (const k of ['time', 'place', 'skill']) if (passes(plan, slot, dist, k)) { near[k].push(scoreEvent(profile, plan, opts.ctx, now)); break; }
+      continue;
+    }
     const item = scoreEvent(profile, plan, opts.ctx, now);
-    (item.clash.length ? hidden : bucket).push(item);
+    (item.clash.length ? hidden : kind === 'exact' ? exact : similar).push(item);
   }
-  const byScore = (a, b) => b.score - a.score;
-  return { intent: it, filters: { act, place, radius, time, skill, words }, exact: exact.sort(byScore), similar: similar.sort(byScore), hidden };
+
+  const sorts = { best: (a, b) => b.score - a.score, soon: (a, b) => a.slot.start - b.slot.start, near: (a, b) => a.dist - b.dist || b.score - a.score };
+  const by = sorts[opts.sort] || sorts.best;
+  // Nothing exact: say which filter is in the way and show what's behind it
+  let fallback = null;
+  if (!exact.length) {
+    const k = ['time', 'place', 'skill'].find((x) => near[x].filter((i) => !i.clash.length).length);
+    if (k) fallback = { relax: k, items: near[k].filter((i) => !i.clash.length).sort(sorts.soon).slice(0, 3) };
+  }
+  // A word we don't know at all ("yoga") is demand: no activity, no venue, nothing matched
+  const unknown = !act && !venue && words.length && !exact.length && !hidden.length ? words.join(' ') : null;
+
+  return {
+    intent: it,
+    filters: { act, venue, place, radius, radiusSet, time, skill, words, spots: !!f.spots, open: !!f.open },
+    corrected, peopleQuery, unknown, fallback,
+    exact: exact.sort(by), similar: similar.sort(by), hidden,
+  };
+}
+
+// Typeahead: what the box could mean so far. Activities and venues by prefix (or a near miss), each with how many
+// open plans it has nearby, so a suggestion never leads to nothing without saying so.
+function searchSuggest(text, profile, plans, opts = {}) {
+  const now = opts.now || new Date();
+  const t = (text || '').toLowerCase().trim();
+  if (!t) return [];
+  const last = t.split(/\s+/).pop();
+  const idx = browseIndex(profile, plans, now, opts.ctx);
+  const out = [];
+  const it = parseIntent(t, profile.suburb, now);
+  const head = t.slice(0, t.length - last.length);
+  if (!it.activity) {
+    for (const a of ACTIVITIES) {
+      if (a.cat === 'service') continue;
+      const hit = [a.label.toLowerCase(), ...a.words].find((w) => w.startsWith(last)) || a.label.toLowerCase().split(' ').find((p) => p.startsWith(last));
+      const typo = !hit && last.length >= 4 && [a.label.toLowerCase(), ...a.words].some((w) => editDistance(last, w.slice(0, last.length + 1)) <= 1);
+      if (hit || typo) out.push({ kind: 'act', id: a.id, label: a.label, q: (head + a.label.toLowerCase()).trim(), count: idx.byAct[a.id] || 0 });
+    }
+  }
+  if (!it.venue && last.length >= 2) {
+    for (const v of VENUES) {
+      const n = v.name.toLowerCase();
+      if (n.startsWith(last) || n.split(/[^a-z]+/).some((p) => p.length > 2 && p.startsWith(last) && last.length >= 3)) {
+        const count = plans.filter((g) => g.venueId === v.id && !g.past && g.status !== 'cancelled' && g.visibility !== 'invite' && eventPhase(g, now) !== 'done').length;
+        out.push({ kind: 'venue', id: v.id, label: v.name.replace(/\s*\(.*\)$/, ''), sub: v.suburb, q: (head + v.name.replace(/\s*\(.*\)$/, '').toLowerCase()).trim(), count });
+      }
+    }
+  }
+  if (it.place.assumed && last.length >= 3) {
+    for (const p of PLACES) {
+      if (!p.name.toLowerCase().startsWith(last)) continue;
+      const count = plans.filter((g) => !g.past && g.status !== 'cancelled' && g.visibility !== 'invite' && eventPhase(g, now) !== 'done' && km(p, VENUE[g.venueId] || PLACE[g.place]) <= DEFAULT_RADIUS_KM).length;
+      out.push({ kind: 'place', id: p.name, label: p.name, sub: `within ${DEFAULT_RADIUS_KM} km`, q: (head + p.name.toLowerCase()).trim(), count });
+    }
+  }
+  // Activity typed already: offer the common next words
+  if (it.activity && !/\s$/.test(text) && t.endsWith(it.activity.heard)) {
+    for (const w of ['this weekend', 'tonight', 'tomorrow', 'before work', 'for beginners']) out.push({ kind: 'more', label: `${it.activity.label} ${w}`, q: `${t} ${w}` });
+  }
+  return out.sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, 6);
 }
 
 // Browse: how many open events per activity and per day for the next week.
@@ -607,5 +769,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

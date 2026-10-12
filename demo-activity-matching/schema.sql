@@ -18,7 +18,8 @@ create table activities (
   tag_group   text not null check (tag_group in ('Sports', 'Hobbies', 'Professional skills')),
   usual_size  int  not null default 2,
   traits      text[] not null default '{}',   -- water, heights, contact
-  synonyms    text[] not null default '{}'    -- soccer -> football
+  synonyms    text[] not null default '{}',   -- soccer -> football (parsed as this activity)
+  aliases     text[] not null default '{}'    -- footy, rugby -> football (shown as "the closest thing")
 );
 
 create table suburbs (
@@ -152,11 +153,45 @@ create table asks (
 );
 create index on asks (activity_id) where status = 'open';
 
+-- A saved search: a private standing query. Run against each newly posted event; a match sends one notification.
+-- Unlike an ask it never reaches other people and nobody can see it.
+create table saved_searches (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references users(id) on delete cascade,
+  raw_text    text not null default '' check (length(raw_text) <= 120),
+  activity_id text references activities(id),
+  venue_id    uuid references venues(id),
+  centre      geography(point),                     -- null = the user's home suburb
+  radius_km   int check (radius_km in (2, 5, 10, 20, 50)),
+  when_preset text check (when_preset in ('today', 'tomorrow', 'this weekend', 'next 7 days')),
+  level       skill_level,
+  has_spots   boolean not null default false,
+  open_join   boolean not null default false,
+  words       text,                                 -- leftover words matched against title and description
+  last_notified_at timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index on saved_searches (activity_id);
+
+-- Search log, kept 90 days. Never shown to anyone. Zero-result queries are demand: grouped by suburb and term,
+-- they tell Keen which activities to suggest to people who could host them ("12 people near Manly searched yoga").
+create table search_log (
+  id          bigserial primary key,
+  user_id     uuid references users(id) on delete set null,
+  suburb_id   text references suburbs(id),
+  raw_text    text not null,
+  activity_id text references activities(id),       -- after typo and alias repair
+  unknown_term text,                                 -- set when no activity, venue or plan matched
+  results     int not null,
+  created_at  timestamptz not null default now()
+);
+create index on search_log (unknown_term, suburb_id) where results = 0;
+
 -- Every "might be keen" ask, plan invite and reach-out sent, so the weekly cap can be enforced.
 create table notifications (
   id         bigserial primary key,
   user_id    uuid not null references users(id),
-  kind       text not null check (kind in ('ask', 'plan', 'invite', 'thread', 'reminder', 'feedback')),
+  kind       text not null check (kind in ('ask', 'plan', 'invite', 'thread', 'reminder', 'feedback', 'saved_search')),
   event_id   uuid references events(id),
   ask_id     uuid references asks(id),
   created_at timestamptz not null default now(),
@@ -249,12 +284,26 @@ create unique index on attended_activity (user_id, activity_id);
 --   and not exists (select 1 from blocks b where (b.blocker_id = :me and b.blocked_id = e.organiser_id)
 --                                            or (b.blocker_id = e.organiser_id and b.blocked_id = :me));
 
--- Search: the parser turns "padel this weekend in Mosman" into :activity, :from, :to, :centre, :radius_km.
+-- Search (MODEL.md §4): the parser turns "padel this weekend in Mosman" into :activity, :venue, :slots, :centre,
+-- :radius_km, :level, :words. Typos are repaired before this runs: the nearest activity synonym by trigram similarity.
+--   select a.id from activities a, unnest(a.synonyms) s where similarity(s, :word) > 0.4 order by similarity(s, :word) desc limit 1;
 -- ... where (:activity is null or e.activity_id = :activity
 --            or e.activity_id in (select id from activities where category_id = (select category_id from activities where id = :activity)))
---   and (:from is null or tstzrange(e.starts_at, e.ends_at) && tstzrange(:from, :to))
+--   and (:venue is null or e.venue_id = :venue)
+--   and (:slots is null or tstzrange(e.starts_at, e.ends_at) && any(:slots))
 --   and st_dwithin(v.location, :centre, :radius_km * 1000)
+--   and (:level is null or e.level in (:level, 'casual'))
+--   and (:has_spots is false or (select count(*) from event_members m where m.event_id = e.id and m.status = 'going') < e.capacity)
+--   and (:open_join is false or e.join_mode = 'open')
 --   and (:words is null or e.title % :words or e.description ilike '%' || :words || '%')
+-- No exact rows: rerun with one filter relaxed (time, then distance, then level) and show those as "other times" etc.
+-- Saved searches for a newly posted event :event (same predicates from the event's side):
+--   select s.user_id from saved_searches s, events e join venues v on v.id = e.venue_id
+--   where e.id = :event and (s.activity_id is null or s.activity_id = e.activity_id) and (s.venue_id is null or s.venue_id = e.venue_id)
+--     and st_dwithin(v.location, coalesce(s.centre, (select centroid from suburbs where id = (select home_suburb_id from users where id = s.user_id))),
+--                    coalesce(s.radius_km, (select travel_radius_km from users where id = s.user_id)) * 1000)
+--     and (s.level is null or e.level in (s.level, 'casual'))
+--     and (s.last_notified_at is null or s.last_notified_at < now() - interval '1 day')   -- at most one a day per search
 
 -- Browse counts by day and activity:
 -- select date_trunc('day', e.starts_at at time zone 'Australia/Sydney') as day, e.activity_id, count(*) ... group by 1, 2;

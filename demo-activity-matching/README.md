@@ -22,7 +22,7 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Matches | Groups to join, people keen right now, a suggested plan that combines individuals, and the "might be keen" reach-out. |
 | No match | "Board games in Newtown tonight": the ask is saved and passed on, with a "widen radius" option. |
 | Explore | Recommendations with reasons, browse by day, browse by activity. Plans that clash with your avoid list are held back with a count. |
-| Search | "padel this weekend": the query becomes removable filter chips. Try "pickleball" (similar results) or "karaoke" (no results). |
+| Search | "padel this weekend": the query becomes removable filter chips. Try "padle" (typo), "footy" (local name), "padel 7am" (other times), "Mia" (people aren't searchable), "yoga" (no results, notify me), and the Filters button. |
 | Event page | Interested or join, directions with map links, "why you're seeing this" graph, who's going, thread preview. |
 | Thread | Ask "where do we meet?" or "what do I bring?" and the organiser answers. Reply to a message. Type a phone number to see it hidden. |
 | Create event | Activity, day, time, venue, meeting point and directions, spots, level, details, approvals, who can find it, reach preview. |

@@ -300,16 +300,76 @@ never names, until people say they're interested.
 
 ## 4. Search
 
-Search finds **events, never people**.
+Search finds **events, never people**. It's the same parser as the ask box, so one sentence works in both places.
 
-1. The query goes through the same parser as the ask box. "padel this weekend in Mosman" becomes activity = padel,
-   time = this weekend, place = Mosman with the default radius.
-2. Only what the person typed becomes a filter. Their profile level and home suburb are used for ranking, not to narrow results.
-3. Words that aren't a known activity fall back to matching the title, description, activity and venue ("trivia", "photo").
-4. Results are split into **exact** (same activity) and **similar** (same category), each ranked by the recommendation
-   score (§6). Plans that clash with the avoid list are held back with a count.
-5. Each parsed filter shows as a removable chip.
-6. No results offers "post a plan" (prefilled from the query) or "save as an ask".
+### 4.1 Pipeline
+
+| Step | What happens | Example |
+|---|---|---|
+| 1. Parse | Activity, venue, place, radius, time, level, as for an ask (§3, `parseIntent`). | "padel this weekend in Mosman" → padel · Sat–Sun · Mosman 5 km |
+| 2. Repair | A word that isn't an activity is checked for a **typo** (edit distance 1, or 2 for words of 7+ letters, swaps count as 1), a **plural** ("hikes") or a **local name** (`activities.aliases`: footy, rugby → football). | "padle" → padel, with "Search for 'padle' instead" |
+| 3. Leftover words | Time, level, place and filler words are removed. What's left is matched against title, description, activity and venue. If nothing is left, only the filters apply. | "something sunday morning" → every plan on Sunday morning |
+| 4. Filter | Only what was typed or picked in Filters narrows the results. The profile ranks, it never narrows. | |
+| 5. Bucket | **Exact** (same activity), **similar** (same category), **held back** (clashes with the avoid list, shown as a count). | "pickleball" → padel and tennis under Similar |
+| 6. Rank | Recommendation score (§6) by default. Sort by **soonest** or **nearest** instead. | |
+| 7. Fall back | No exact results: rerun with one filter relaxed, in this order: time, distance, level. Show those under a named heading. | "padel 7am" → "Padel at other times" |
+
+### 4.2 Filters
+
+| Filter | From the query | From the Filters sheet | Rule |
+|---|---|---|---|
+| Activity | "padel", "footy", "padle" | Browse tiles | Exact, plus same category under Similar |
+| Venue | "manly oval" | Typeahead | Only plans at that venue |
+| Place | "in Mosman" | Typeahead | Plans within the radius of that suburb |
+| Distance | "within 2 km" | 2, 5, 10, 20, 50 km | Default: your travel radius from your home suburb |
+| When | "tonight", "this weekend", "before work", "Sat 8am" | Today, Tomorrow, This weekend, Next 7 days | A day with no time means the whole day. A part of the day with no day ("before work") means the next 7 days. A clock time with no day means today, or tomorrow if it has passed. |
+| Level | "beginner", "competitive" | Beginner … Competitive | That level, plus casual plans (open to everyone) |
+| Spots left | — | On/off | Hides full plans |
+| Join straight away | — | On/off | Hides plans that need the host's approval |
+
+Each filter shows as a removable chip. Filters picked in the sheet also show a count on the Filters button.
+
+### 4.3 Typeahead
+
+While typing, a list under the box shows what the text could mean: activities, venues and suburbs that start with
+what's typed (or are one typo away), each with the number of open plans nearby, so a suggestion never leads to an empty
+page without warning. Once an activity is typed, common next words are offered ("padel this weekend", "padel before work").
+With an empty box it shows recent searches (kept on the device, last 5) and examples.
+
+### 4.4 Messages instead of a silent zero
+
+| Situation | What the person sees |
+|---|---|
+| Typo repaired | "Showing results for padel. Search for 'padle' instead." |
+| Local name | "There's no footy on Keen yet, so these are football plans, the closest thing." |
+| A first name ("Mia") | "Search finds plans, not people." Explains why, and points to history (invite someone you've played with) and Ask. |
+| Filter too tight | The near misses under "Padel at other times", "Surfing further away" or "Tennis at other levels", with "Show all" or "Widen to 20 km". |
+| Unknown activity ("yoga") | "No yoga plans yet." Keen logs it as demand. |
+| Anything with no results | Post a plan (prefilled), save as an ask, or **Notify me**. |
+
+### 4.5 Saved searches ("Notify me")
+
+- A saved search is a private standing query (`saved_searches`). When an event is posted, it's checked against saved
+  searches from the event's side, the same way reach works (§3.4), and a match sends one notification.
+- At most one notification per saved search per day. It counts towards the weekly cap of the person who saved it.
+- Nobody else can see it. That's the difference from an ask, which reaches people who want the same thing.
+- Saved searches appear at the top of Explore with the current number of matches.
+
+### 4.6 Demand from zero-result searches
+
+Every search is logged for 90 days (`search_log`) with the repaired activity and any unknown term. Zero-result searches
+grouped by suburb and term ("12 people near Manly searched yoga this month") are used to:
+
+- suggest the activity to people who list it as an interest and have hosted before ("Want to host yoga? 12 people nearby are looking");
+- decide which activities to add to the list (and which aliases to add, from repeated typos and local names).
+
+The log is never shown to anyone and isn't linked to a profile in any report.
+
+### 4.7 Privacy
+
+- No search by name, ever, and no list of people in results. People appear only as faces and first names on a plan's card.
+- Invite-only plans are never in search. Blocked people's plans are removed both ways.
+- Avoid-list clashes are held back with a count and a "Show" link, never silently dropped.
 
 ## 5. Browse
 
