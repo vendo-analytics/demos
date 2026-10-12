@@ -821,3 +821,6 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .preview-card { pointer-events: none; }
 .cal-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
 .sheet .notice span { display: block; }
+.rc-row { display: grid !important; gap: 8px; }
+.rc-row .seg { justify-self: start; }
+.rc-note { margin: 0; }

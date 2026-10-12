@@ -66,6 +66,20 @@ VIEWS.plan = ({ v: id }) => {
   </div>`;
 };
 
+function attendanceHTML(g) {
+  const a = g.attendance;
+  if (!a) return `<div class="notice info"><b>Attendance taken</b>${plural(g.members.length, 'person')} came. Thanks for organising.</div>`;
+  const names = (ids) => ids.map((m) => PERSON[m].name).join(', ');
+  const n = a.came.length + a.late.length + 1;
+  return `<div class="card"><div class="h3">Attendance taken</div><div class="ledger">
+    <div><span>Came${a.came.length ? `: ${esc(names(a.came))}` : ''}</span><b class="num">${a.came.length + 1}</b></div>
+    ${a.late.length ? `<div><span>Late: ${esc(names(a.late))}</span><b class="num">${a.late.length}</b></div>` : ''}
+    ${a.noshow.length ? `<div><span>No-show: ${esc(names(a.noshow))}, waiting for a second report</span><b class="num">${a.noshow.length}</b></div>` : ''}
+    <div><span>Goodwill given</span><b class="num">+${fmtPts((n - 1) * GOODWILL_RULES.attended)}</b></div>
+    <div><span>You, for hosting${n >= 3 ? '' : ' (needs 3 or more)'}</span><b class="num">${n >= 3 ? `+${GOODWILL_RULES.hosted + GOODWILL_RULES.attended}` : `+${GOODWILL_RULES.attended}`}</b></div>
+  </div><p class="small muted" style="margin:0">Everyone who came can now rate the plan and each other for 7 days.</p></div>`;
+}
+
 function calendarHTML(g) {
   const c = calendarLinks(g, slotOf(g, NOW), VENUE[g.venueId]);
   return `<div class="cal-row"><span class="small muted">Add to calendar</span><a class="link-btn" href="${c.google}" target="_blank" rel="noopener">Google</a><a class="link-btn" href="data:text/calendar;charset=utf-8,${encodeURIComponent(c.ics)}" download="${esc(g.title.replace(/[^\w ]+/g, ''))}.ics">Apple / Outlook (.ics)</a></div>`;
@@ -110,7 +124,7 @@ function actionHTML(g, st, phase) {
     if (g.past || phase === 'done') {
       return g.needsRollcall
         ? `<div class="card"><div class="h3">Take attendance</div><p class="small muted" style="margin:0">Mark who came. It's what earns everyone Goodwill, and it closes the plan.</p><button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button></div>`
-        : `<div class="notice info"><b>Attendance taken</b>${plural(g.members.length, 'person')} came. Thanks for organising.</div><button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>`;
+        : `${attendanceHTML(g)}<button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>`;
     }
     return `${requestsHTML(g)}${phase === 'live' ? `<button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button>` : `<div class="btn-pair"><button type="button" class="btn ghost" data-act="edit-plan" data-v="${id}">Edit plan</button><button type="button" class="btn ghost" data-act="cancel-plan" data-v="${id}">Cancel plan</button></div>`}
       ${reachHTML(g)}
@@ -124,8 +138,8 @@ function actionHTML(g, st, phase) {
   }
   if (phase === 'live') {
     if (st === 'going') return `<div class="card live"><div class="h3">It's on now</div><p class="small muted" style="margin:0">Check in when you get there. Someone who's there confirms it, and that's what counts as attending.</p><div class="btn-pair"><button type="button" class="btn" data-act="checkin" data-v="${id}">I'm here</button><button type="button" class="btn ghost" data-act="late" data-v="${id}">Running late</button></div></div>`;
-    if (st === 'checked_in') return `<div class="notice warn"><b>Checked in</b>Waiting for someone there to confirm.</div>`;
-    if (st === 'attended') return `<div class="notice info"><b>You're checked in</b>${esc(g.confirmedBy ? PERSON[g.confirmedBy].name : org.name)} confirmed you're here. Have fun.</div>`;
+    if (st === 'checked_in') return `<div class="notice warn"><b>Checked in</b>Waiting for someone there to confirm.</div>${hereHTML(g)}`;
+    if (st === 'attended') return `<div class="notice info"><b>You're checked in</b>${esc(g.confirmedBy ? PERSON[g.confirmedBy].name : org.name)} confirmed you're here. Have fun.</div>${hereHTML(g)}`;
     return `<div class="notice warn"><b>Happening now</b>It's too late to join this one. Say you're interested in the next one from the organiser's profile.</div>`;
   }
   // upcoming
@@ -295,21 +309,41 @@ function scrollThread() {
 
 // ---------- roll call (organiser marks attendance) ----------
 
+// Roll call: people who checked in start as "Came"; everyone else must be marked on purpose, so attendance
+// (and the Goodwill that comes with it) is never given away by default.
+const RC_MARKS = [['came', 'Came'], ['late', 'Late'], ['noshow', 'No-show']];
 VIEWS.rollcall = ({ v: id }) => {
   const g = findPlan(id);
-  if (!S.rc || S.rc.id !== id) S.rc = { id, came: Object.fromEntries(g.members.filter((m) => m !== 'me').map((m) => [m, true])) };
-  const checkedIn = { p23: '7:58am', p24: '8:03am' };
+  const checkins = g.checkins || {};
+  if (!S.rc || S.rc.id !== id) S.rc = { id, mark: Object.fromEntries(g.members.filter((m) => m !== 'me').map((m) => [m, checkins[m] ? 'came' : null])) };
+  const unmarked = Object.keys(S.rc.mark).filter((m) => !S.rc.mark[m]);
   return bar('Take attendance') + `<div class="pad">
     <div><p class="eyebrow">${esc(fmtSlot(slotOf(g, NOW), NOW))}</p><h1 class="h1" style="font-size:24px">${esc(g.title)}</h1><div class="small muted">${esc(g.venue)}</div></div>
-    <p class="small muted" style="margin:0">Mark who came. Confirmed attendance is what earns people Goodwill. A no-show only costs someone Goodwill when a second person reports it too.</p>
+    <p class="small muted" style="margin:0">Mark who came. Confirmed attendance is what earns people Goodwill, so people who didn't check in aren't marked for you.</p>
     <div class="card" style="gap:0">
       <div class="member">${avatar(ME, 's')}<b style="flex:1">You</b><span class="small muted">organiser</span></div>
-      ${Object.entries(S.rc.came).map(([pid, came]) => `<div class="member">${avatar(PERSON[pid], 's')}<div style="flex:1;min-width:0"><b>${esc(PERSON[pid].name)}</b><div class="small muted">${checkedIn[pid] ? `Checked in ${checkedIn[pid]}` : 'Didn\'t check in'}</div></div>
-        <span class="seg"><button type="button" data-act="rc" data-v="${pid}:1" aria-pressed="${came}">Came</button><button type="button" data-act="rc" data-v="${pid}:0" aria-pressed="${!came}">No-show</button></span></div>`).join('')}
+      ${Object.entries(S.rc.mark).map(([pid, mk]) => `<div class="member rc-row"><div class="row" style="gap:10px;align-items:center">${avatar(PERSON[pid], 's')}<div style="flex:1;min-width:0"><b>${esc(PERSON[pid].name)}</b><div class="small muted">${checkins[pid] ? `Checked in ${checkins[pid]}` : "Didn't check in"}</div></div></div>
+        <span class="seg">${RC_MARKS.map(([k, l]) => `<button type="button" data-act="rc" data-v="${pid}:${k}" aria-pressed="${mk === k}">${l}</button>`).join('')}</span>
+        ${mk === 'noshow' ? `<p class="small muted rc-note">${esc(PERSON[pid].name)} is asked what happened. It only costs Goodwill if someone else who came reports it too.</p>` : ''}</div>`).join('')}
     </div>
-    <button type="button" class="btn block" data-act="rc-confirm" data-v="${id}">Confirm attendance</button>
+    <button type="button" class="btn block" data-act="rc-confirm" data-v="${id}" ${unmarked.length ? 'disabled' : ''}>${unmarked.length ? `Mark ${esc(unmarked.map((m) => PERSON[m].name).join(' and '))} first` : 'Confirm attendance'}</button>
+    <p class="small muted" style="margin:0">Late still counts as came. It's private, and only feeds the "on time" tag.</p>
   </div>`;
 };
+
+// On the day, for people checked in: who else is here, and a way to confirm them. Confirming takes two people.
+function hereHTML(g) {
+  const here = g.here || {};
+  const rows = g.members.filter((m) => m !== 'me').map((m) => {
+    const st = here[m];
+    const right = st === 'confirmed' ? '<span class="status ok">Here</span>'
+      : st === 'checked_in' ? `<button type="button" class="btn sm" data-act="peer-confirm" data-v="${g.id}:${m}">Confirm</button>`
+      : '<span class="small muted">Not here yet</span>';
+    return `<div class="member">${avatar(PERSON[m], 's')}<div style="flex:1;min-width:0"><b>${esc(PERSON[m].name)}</b><div class="small muted">${m === g.org ? 'organiser · ' : ''}${st === 'checked_in' ? 'checked in, waiting for a confirm' : st === 'confirmed' ? 'confirmed' : 'not checked in'}</div></div>${right}</div>`;
+  }).join('');
+  return `<div class="card" style="gap:0"><div class="row"><div class="h3 grow">Who's here</div><span class="small muted">${Object.values(here).filter((x) => x === 'confirmed').length + (myStatus(g) === 'attended' ? 1 : 0)} confirmed</span></div>${rows}
+    <p class="small muted" style="margin:8px 0 0">Only confirm people you can see. Each confirm gives them +50 Goodwill.</p></div>`;
+}
 
 // ---------- Plans tab ----------
 
@@ -548,11 +582,21 @@ Object.assign(ACTIONS, {
     render(true);
     toast('Plan cancelled. Everyone in it has been told.');
   },
-  rc: (v) => { const [pid, c] = v.split(':'); S.rc.came[pid] = c === '1'; render(true); },
+  rc: (v) => { const [pid, k] = v.split(':'); S.rc.mark[pid] = k; render(true); },
+  'peer-confirm': (v) => {
+    const [id, pid] = v.split(':');
+    const g = findPlan(id);
+    g.here = { ...(g.here || {}), [pid]: 'confirmed' };
+    postSys(id, `${ME.name} confirmed ${PERSON[pid].name} is here`);
+    render(true);
+    toast(`Thanks. ${PERSON[pid].name} gets +50 Goodwill.`);
+  },
   'rc-confirm': (v) => {
     const g = findPlan(v);
-    const came = Object.entries(S.rc.came).filter(([, c]) => c).map(([pid]) => pid);
-    const missed = Object.keys(S.rc.came).filter((pid) => !S.rc.came[pid]);
+    if (Object.values(S.rc.mark).some((k) => !k)) return;
+    const came = Object.keys(S.rc.mark).filter((pid) => S.rc.mark[pid] !== 'noshow');
+    const missed = Object.keys(S.rc.mark).filter((pid) => S.rc.mark[pid] === 'noshow');
+    g.attendance = { came: Object.keys(S.rc.mark).filter((pid) => S.rc.mark[pid] === 'came'), late: Object.keys(S.rc.mark).filter((pid) => S.rc.mark[pid] === 'late'), noshow: missed };
     g.needsRollcall = false;
     g.confirmed = true;
     g.members = ['me', ...came];

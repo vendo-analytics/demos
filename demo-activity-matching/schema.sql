@@ -129,6 +129,7 @@ create table event_members (
   late_cancel          boolean not null default false,
   checked_in_at        timestamptz,
   attendance           text check (attendance in ('attended', 'no_show')),
+  arrived_late         boolean not null default false,   -- roll call "Late": still attended; private, feeds the on-time tag
   confirmed_by         uuid[] not null default '{}',
   last_read_message_id bigint,
   primary key (event_id, user_id)

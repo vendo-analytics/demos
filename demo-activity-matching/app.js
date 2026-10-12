@@ -634,7 +634,9 @@ const NOTES = {
     title: 'Marking attendance',
     body: `<ul>
       <li>Attendance is what Goodwill is built on, so it needs two sides: people check in when they arrive, and the organiser or another attendee confirms.</li>
-      <li>The organiser's roll call shows who checked in. Confirming it gives everyone who came +50, and the organiser +100 if 3 or more came.</li>
+      <li>The organiser's roll call shows who checked in. Those people start as Came; anyone who didn't check in must be marked Came, Late or No-show before it can be confirmed, so Goodwill is never given by default.</li>
+      <li>Confirming gives everyone who came (late included) +50, and the organiser +100 if 3 or more came. The plan page then shows the summary.</li>
+      <li>On the day, once you've checked in, <b>Who's here</b> lets you confirm others you can see. Try Check-in: Mia is waiting for a confirm.</li>
       <li>A no-show only costs Goodwill when a second person reports it too, so one grudge can't hurt anyone.</li>
       <li>Plans without a roll call 24 hours after the end fall back to check-ins confirmed by any other attendee.</li>
     </ul>`,

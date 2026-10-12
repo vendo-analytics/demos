@@ -553,8 +553,12 @@ Attendance is what Goodwill is built on, so it always needs a second person.
 1. **Check-in** opens 30 minutes before the start. Tapping "I'm here" sets `checked_in`. The app can offer it from
    location near the venue, but location is never required or stored.
 2. **Confirmation:** the organiser, or any other checked-in attendee, confirms. You then become `attended` and get +50 Goodwill.
-3. **Roll call:** the organiser marks each member as came or no-show (check-in times are shown). Confirming gives every
-   attendee +50, and the organiser +100 if 3 or more came.
+3. **Roll call:** the organiser marks each member **Came**, **Late** or **No-show**, with check-in times shown. People who
+   checked in start as Came; everyone else starts unmarked, and the roll call can't be confirmed until they're marked.
+   Late counts as attended (`arrived_late`, private, feeds the "on time" tag). Confirming gives every attendee +50, and the
+   organiser +100 if 3 or more came. The plan then shows who came, who was late, pending no-shows and the Goodwill given.
+   - **Peer confirmation on the day:** anyone checked in sees **Who's here** and can confirm others who have checked in
+     ("only confirm people you can see"). Each confirm is logged in `confirmed_by` and posted to the thread.
 4. **Fallback:** with no roll call within 24 hours of the end, check-ins confirmed by another attendee count. Unconfirmed
    check-ins earn nothing.
 5. **No-shows:** one report flags it. It only costs −150 Goodwill and counts on the profile when a **second, independent**

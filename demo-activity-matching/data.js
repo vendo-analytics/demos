@@ -275,7 +275,7 @@ const PLANS = [
   { id: 'g17', org: 'p17', act: 'chess', title: 'Lunchtime chess', venueId: 'manly-library', when: ['wed', 12, 13.5], members: ['p17'], interested: [], size: 4, skill: 'casual', note: 'Two boards. Clocks optional.' },
   { id: 'g18', org: 'p13', act: 'volleyball', title: 'Dee Why beach volley', venueId: 'deewhy-nets', when: ['sat', 15, 17], members: ['p13', 'p14'], interested: [], size: 8, skill: 'casual', note: 'Two nets, rotating teams.' },
   // Happening right now, and the user is going: used to demo check-in.
-  { id: 'live1', org: 'p23', act: 'padel', title: 'Padel doubles', venueId: 'manly-padel', when: ['now', -0.25, 1.25], members: ['p23', 'p1', 'p24', 'me'], interested: [], size: 4, skill: 'casual', note: 'Courts are lit. Two sets then swap partners.' },
+  { id: 'live1', org: 'p23', act: 'padel', title: 'Padel doubles', venueId: 'manly-padel', when: ['now', -0.25, 1.25], members: ['p23', 'p1', 'p24', 'me'], interested: [], size: 4, skill: 'casual', here: { p23: 'confirmed', p1: 'checked_in' }, note: 'Courts are lit. Two sets then swap partners.' },
 ];
 
 // An upcoming plan the user hosts, with someone waiting to be accepted. Used to demo the organiser's tools.
@@ -291,7 +291,7 @@ const PAST_PLANS = [
 // The user's attended and hosted events, newest first. `rated` is the star rating they gave.
 // All are confirmed attendance except h0, which the user hosted and still needs to take attendance for.
 const HISTORY = [
-  { id: 'h0', org: 'me', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['-7', 8, 10], members: ['me', 'p23', 'p24', 'p1'], interested: [], size: 4, skill: 'casual', past: true, needsRollcall: true, confirmed: false },
+  { id: 'h0', org: 'me', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['-7', 8, 10], members: ['me', 'p23', 'p24', 'p1'], interested: [], size: 4, skill: 'casual', past: true, needsRollcall: true, confirmed: false, checkins: { p23: '7:58am', p24: '8:03am' } },
   { id: 'h2', org: 'p10', act: 'running', title: 'Sunrise run', venueId: 'manly-wharf', when: ['-8', 6, 7], members: ['p10', 'p22', 'p11', 'me'], interested: [], size: 12, skill: 'casual', past: true, rated: 5 },
   { id: 'h3', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['-16', 18, 19.5], members: ['p4', 'p7', 'p9', 'me'], interested: [], size: 11, skill: 'casual', past: true, rated: 4 },
   { id: 'h4', org: 'p27', act: 'language', title: 'Spanish over coffee', venueId: 'corso-cafe', when: ['-19', 7.5, 8.5], members: ['p27', 'p18', 'me'], interested: [], size: 6, skill: 'beginner', past: true, rated: 5 },
