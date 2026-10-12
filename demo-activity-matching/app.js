@@ -34,6 +34,7 @@ const S = {
   rc: null,
   ex: { q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false, view: 'list', mapR: null, pin: null },
   searchRecent: [],
+  lateCancels: 1,
   recFb: { dismissed: new Set(), fewer: {} },
   savedSearches: [],
   hidden: new Set(),
@@ -329,28 +330,59 @@ VIEWS.myask = ({ v: id }) => {
 const GOOD_TAGS = POSITIVE_TAGS;
 const BAD_TAGS = NEGATIVE_TAGS;
 
+const STAR_WORDS = ['', "Didn't go well", 'Not great', 'OK', 'Good', 'Great'];
+const REPORT_TAGS = ['Made me uncomfortable', 'Asked for contact details'];
+
+// Feedback after a plan. Attendance marks are optional here (the roll call is the main record); ratings of people are
+// double-blind: what someone said about you is shown once you've rated them too, or after 7 days.
 VIEWS.feedback = ({ v: id }) => {
   const g = findPlan(id);
-  if (!S.fb) S.fb = { stars: 0, people: Object.fromEntries(g.members.filter((m) => m !== 'me').map((m) => [m, { came: true, vibe: null, tags: [] }])) };
+  if (!S.fb) S.fb = { stars: 0, people: Object.fromEntries(g.members.filter((m) => m !== 'me').map((m) => [m, { came: null, vibe: null, tags: [] }])) };
   const fb = S.fb;
   const ready = fb.stars > 0;
   return bar('How was it?') + `<div class="pad">
-    <div><p class="eyebrow">${esc(fmtSlot(resolveWhen(g.when, NOW)[0], NOW))}</p><h1 class="h1" style="font-size:24px">${esc(g.title)}</h1><div class="small muted">${esc(g.venue)}</div></div>
-    <div class="card"><div class="h3">Rate the plan</div><div class="stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-act="fb-star" data-v="${n}" aria-pressed="${n <= fb.stars}" aria-label="${n} star${n > 1 ? 's' : ''}">★</button>`).join('')}</div></div>
-    <div class="card" style="gap:0"><div class="h3" style="margin-bottom:4px">The people</div>
+    <div><p class="eyebrow">${esc(fmtSlot(resolveWhen(g.when, NOW)[0], NOW))}</p><h1 class="h1" style="font-size:24px">${esc(g.title)}</h1><div class="small muted">${esc(g.venue)} · organised by ${esc(PERSON[g.org].name)}</div></div>
+    <div class="card"><div class="h3">Rate the plan</div><div class="stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-act="fb-star" data-v="${n}" aria-pressed="${n <= fb.stars}" aria-label="${n} star${n > 1 ? 's' : ''}">★</button>`).join('')}</div>
+      <p class="small ${fb.stars ? '' : 'muted'}" style="margin:0">${fb.stars ? STAR_WORDS[fb.stars] : 'Counts towards the organiser\'s hosting rating, shown once they\'ve hosted 3 plans.'}</p></div>
+    <div class="card" style="gap:0"><div class="h3">The people</div><p class="small muted" style="margin:2px 0 6px">All optional. They see what you said only after they've rated you too, or after 7 days, and never who said "not great".</p>
       ${Object.entries(fb.people).map(([pid, st]) => {
         const p = PERSON[pid];
         const tags = st.vibe === 'bad' ? BAD_TAGS : GOOD_TAGS;
+        const serious = st.tags.some((t) => REPORT_TAGS.includes(t));
         return `<div class="fb-row"><div class="row">${avatar(p, 's')}<b class="grow">${esc(p.name)}</b>
-          <span class="seg"><button type="button" data-act="fb-came" data-v="${pid}:1" aria-pressed="${st.came}">Came</button><button type="button" data-act="fb-came" data-v="${pid}:0" aria-pressed="${!st.came}">No-show</button></span></div>
-          ${st.came ? `<div class="row"><span class="seg"><button type="button" data-act="fb-vibe" data-v="${pid}:good" aria-pressed="${st.vibe === 'good'}">Good</button><button type="button" data-act="fb-vibe" data-v="${pid}:bad" aria-pressed="${st.vibe === 'bad'}">Not great</button></span></div>
+          <span class="seg" aria-label="Did ${esc(p.name)} come?"><button type="button" data-act="fb-came" data-v="${pid}:1" aria-pressed="${st.came === true}">Came</button><button type="button" data-act="fb-came" data-v="${pid}:0" aria-pressed="${st.came === false}">No-show</button></span></div>
+          ${st.came !== false ? `<div class="row"><span class="seg"><button type="button" data-act="fb-vibe" data-v="${pid}:good" aria-pressed="${st.vibe === 'good'}">Good</button><button type="button" data-act="fb-vibe" data-v="${pid}:bad" aria-pressed="${st.vibe === 'bad'}">Not great</button></span></div>
           ${st.vibe ? `<div class="chips">${tags.map((tg) => `<button type="button" class="chip" data-act="fb-tag" data-v="${pid}:${tg}" aria-pressed="${st.tags.includes(tg)}">${tg}</button>`).join('')}</div>` : ''}` : ''}
-          ${st.vibe === 'bad' || !st.came ? '<p class="small muted" style="margin:0">Only Keen sees this. It never shows on their profile as written.</p>' : ''}
+          ${serious ? `<div class="notice bad"><b>That sounds serious</b><span>A tag only lowers how often you're matched. A report goes to a person at Keen who can act on it.</span><button type="button" class="link-btn" data-act="report" data-v="${pid}">Report ${esc(p.name)} privately</button></div>`
+            : st.vibe === 'bad' || st.came === false ? `<p class="small muted" style="margin:0">Only Keen sees this. ${st.came === false ? 'A no-show only counts if someone else reports it too.' : "It never shows on their profile as written."}</p>` : ''}
         </div>`;
       }).join('')}
     </div>
-    <button type="button" class="btn block" data-act="fb-submit" ${ready ? '' : 'disabled'}>${ready ? 'Send feedback · +20 Goodwill' : 'Rate the plan to send'}</button>
+    <button type="button" class="btn block" data-act="fb-submit" data-v="${id}" ${ready ? '' : 'disabled'}>${ready ? 'Send feedback · +20 Goodwill' : 'Rate the plan to send'}</button>
     <button type="button" class="link-btn" data-act="report-who" data-v="${id}" style="justify-self:center;color:var(--flag)">Something serious happened? Report privately</button>
+  </div>`;
+};
+
+// After sending: what happened to each part of your feedback, and the review about you that it unlocked.
+VIEWS.fbDone = ({ v: id }) => {
+  const r = S.fbResult;
+  const g = findPlan(id);
+  const names = (ids) => ids.map((m) => PERSON[m].name).join(' and ');
+  return bar('Feedback sent') + `<div class="pad">
+    <div class="done-hero"><span class="done-tick">✓</span><h1 class="h1">Thanks</h1><p class="small muted" style="margin:0">${esc(g.title)} · ${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}</p></div>
+    <div class="card"><div class="ledger">
+      <div><span>For leaving feedback</span><b class="num">+${GOODWILL_RULES.feedbackGiven}</b></div>
+      ${r.good.length ? `<div><span>Good reviews sent to ${esc(names(r.good))}; they get +${GOODWILL_RULES.goodReview} each</span><b class="num">${r.good.length}</b></div>` : ''}
+      ${r.bad.length ? `<div><span>"Not great" for ${esc(names(r.bad))}: private, lowers how often you're matched</span><b class="num">${r.bad.length}</b></div>` : ''}
+      ${r.noshow.length ? `<div><span>No-show for ${esc(names(r.noshow))}: counts only with a second report</span><b class="num">${r.noshow.length}</b></div>` : ''}
+      ${r.came.length ? `<div><span>You confirmed ${esc(names(r.came))} came; +50 each</span><b class="num">${r.came.length}</b></div>` : ''}
+    </div></div>
+    ${r.from ? `<div class="card"><p class="eyebrow">About you, now unlocked</p>
+      <div class="row">${avatar(PERSON[r.from], 's')}<span class="grow"><b>${esc(PERSON[r.from].name)}</b> said you were</span><span class="small num" style="color:var(--good);font-weight:600">+${GOODWILL_RULES.goodReview}</span></div>
+      <div class="chips">${r.tagsForMe.map((t) => `<span class="chip got">${esc(t)}</span>`).join('')}</div>
+      <p class="small muted" style="margin:0">${plural(r.waiting, 'review')} from this plan ${r.waiting === 1 ? 'is' : 'are'} still hidden until ${r.waiting === 1 ? 'that person rates' : 'they rate'} or 7 days pass.</p></div>` : '<p class="small muted" style="margin:0">Reviews about you from this plan show once those people rate you too, or after 7 days.</p>'}
+    <button type="button" class="btn block" data-act="tab" data-v="me">See your profile</button>
+    <button type="button" class="btn block ghost" data-act="tab" data-v="activity">Back to plans</button>
   </div>`;
 };
 
@@ -510,25 +542,34 @@ const ACTIONS = {
   'fb-came': (v) => { const [p, c] = v.split(':'); S.fb.people[p].came = c === '1'; if (c === '0') { S.fb.people[p].vibe = null; S.fb.people[p].tags = []; } render(true); },
   'fb-vibe': (v) => { const [p, c] = v.split(':'); const st = S.fb.people[p]; if (st.vibe !== c) st.tags = []; st.vibe = c; render(true); },
   'fb-tag': (v) => { const i = v.indexOf(':'); const p = v.slice(0, i), tg = v.slice(i + 1); const t = S.fb.people[p].tags; t.includes(tg) ? t.splice(t.indexOf(tg), 1) : t.push(tg); render(true); },
-  'fb-submit': () => {
+  'fb-submit': (id) => {
+    const g = findPlan(id) || PAST_PLANS[0];
+    const people = Object.entries(S.fb.people);
     S.feedbackDone = true;
-    for (const [pid, st] of Object.entries(S.fb.people)) if (st.came && st.vibe) S.ratings[pid] = st.vibe;
+    for (const [pid, st] of people) if (st.came !== false && st.vibe) S.ratings[pid] = st.vibe;
     CTX = null;
-    PAST_PLANS[0].rated = S.fb.stars;
-    PAST_PLANS[0].confirmed = true;
-    addPoints(20, 'Left feedback: Friday 6-a-side');
-    setTimeout(() => {
+    g.rated = S.fb.stars;
+    g.confirmed = true;
+    addPoints(GOODWILL_RULES.feedbackGiven, `Left feedback: ${g.title}`);
+    // The review about you that sending yours unlocks (double-blind)
+    // (in the demo, from someone you didn't rate badly; with nobody like that, nothing is unlocked yet)
+    const from = [...g.members.filter((m) => m !== 'me' && m !== g.org), g.org].find((m) => (S.fb.people[m] || {}).vibe !== 'bad') || null;
+    const tagsForMe = ['On time', 'Good sport'];
+    if (from) {
       FEEDBACK_ABOUT_ME.reviews += 1;
-      ['On time', 'Good sport'].forEach((t) => { FEEDBACK_ABOUT_ME.tags[t] += 1; });
-      CTX = null;
-      addPoints(10, 'Good review from Ben: On time, Good sport');
-      if (view().name === 'me') render(true);
-      toast('Ben said you were on time and a good sport. +10 Goodwill.');
-    }, 8000);
-    setTimeout(() => { addPoints(50, 'Attended Friday 6-a-side, confirmed by Luca'); if (view().name === 'me') render(); toast('Luca confirmed you came: +50 Goodwill'); }, 4000);
-    S.fb = null; S.stack = []; S.tab = 'activity';
+      tagsForMe.forEach((t) => { FEEDBACK_ABOUT_ME.tags[t] += 1; });
+      addPoints(GOODWILL_RULES.goodReview, `Good review from ${PERSON[from].name}: ${tagsForMe.join(', ')}`);
+    }
+    S.fbResult = {
+      stars: S.fb.stars, from, tagsForMe, waiting: Math.max(0, g.members.length - 2),
+      good: people.filter(([, st]) => st.came !== false && st.vibe === 'good').map(([pid]) => pid).slice(0, 3),
+      bad: people.filter(([, st]) => st.came !== false && st.vibe === 'bad').map(([pid]) => pid),
+      noshow: people.filter(([, st]) => st.came === false).map(([pid]) => pid),
+      came: people.filter(([, st]) => st.came === true).map(([pid]) => pid),
+    };
+    setTimeout(() => { addPoints(GOODWILL_RULES.attended, `Attended ${g.title}, confirmed by ${PERSON[g.org].name}`); if (view().name === 'me') render(); toast(`${PERSON[g.org].name} confirmed you came: +${GOODWILL_RULES.attended} Goodwill`); }, 4000);
+    S.fb = null; S.tab = 'activity'; S.stack = [{ name: 'fbDone', v: g.id }];
     updateBadge(); render();
-    toast('+20 Goodwill. Your +50 for turning up lands when someone confirms you came.');
   },
   again: (v) => {
     const g = findPlan(v);
@@ -787,8 +828,18 @@ const NOTES = {
     body: `<ul>
       <li>Attendance only counts when someone else who was there confirms it. Claiming it yourself earns nothing.</li>
       <li>Tags instead of free text keep it quick and harder to abuse. Negative tags stay private and go to review.</li>
-      <li>Two independent no-show reports cost 150 Goodwill.</li>
+      <li>Two independent no-show reports cost 150 Goodwill. Nothing is pre-marked: you only mark the people you're sure about.</li>
+      <li>Reviews are double-blind: you see what someone said about you once you've rated them, or after 7 days.</li>
+      <li>Picking "Made me uncomfortable" offers a private report. A tag only changes matching; a report reaches a person.</li>
       <li>Ratings feed matching. People you rated well, and who rated you well, rank higher next time. This is the "platform that learns from your experience".</li>
+    </ul>`,
+  },
+  fbDone: {
+    title: 'After feedback',
+    body: `<ul>
+      <li>Each part of your feedback is accounted for: +20 for leaving it, good reviews passed on (+10 each to them, at most 3 per plan), "not great" kept private, no-shows pending a second report.</li>
+      <li>Reviews are double-blind. What someone said about you appears once you've rated them, or after 7 days, so nobody rates in retaliation.</li>
+      <li>Confirming that someone came here counts as the second side of their attendance when there was no roll call.</li>
     </ul>`,
   },
   me: {

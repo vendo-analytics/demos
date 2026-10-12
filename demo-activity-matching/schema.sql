@@ -127,6 +127,7 @@ create table event_members (
   joined_at            timestamptz not null default now(),
   left_at              timestamptz,
   late_cancel          boolean not null default false,
+  leave_reason         text check (leave_reason in ('came_up', 'unwell', 'injured', 'clash')),  -- unwell and injured never count as late
   checked_in_at        timestamptz,
   attendance           text check (attendance in ('attended', 'no_show')),
   arrived_late         boolean not null default false,   -- roll call "Late": still attended; private, feeds the on-time tag
@@ -243,10 +244,12 @@ create table person_feedback (
   event_id   uuid references events(id),
   from_id    uuid references users(id),
   to_id      uuid references users(id),
-  came       boolean not null,
+  came       boolean,                                -- null: not marked (nothing is pre-marked)
   vibe       text check (vibe in ('good', 'bad')),
   tags       text[] not null default '{}',
   created_at timestamptz not null default now(),
+  -- Double-blind: shown to to_id once they've rated from_id for this event, or 7 days after the event ends.
+  revealed_at timestamptz,
   primary key (event_id, from_id, to_id),
   check (from_id <> to_id)
 );

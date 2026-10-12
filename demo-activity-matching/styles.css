@@ -824,3 +824,7 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .rc-row { display: grid !important; gap: 8px; }
 .rc-row .seg { justify-self: start; }
 .rc-note { margin: 0; }
+.done-hero { display: grid; justify-items: center; gap: 6px; padding: 18px 0 4px; text-align: center; }
+.done-tick { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #34C759, #30B0C7); box-shadow: 0 10px 24px rgb(52 199 89 / 0.35); }
+.chip.got { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.fb-row .notice { margin-top: 4px; }

@@ -80,6 +80,9 @@ function attendanceHTML(g) {
   </div><p class="small muted" style="margin:0">Everyone who came can now rate the plan and each other for 7 days.</p></div>`;
 }
 
+const LEAVE_REASONS = ['Something came up', 'Feeling unwell', 'Injured', 'Clashes with something'];
+const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || 'th');
+
 function calendarHTML(g) {
   const c = calendarLinks(g, slotOf(g, NOW), VENUE[g.venueId]);
   return `<div class="cal-row"><span class="small muted">Add to calendar</span><a class="link-btn" href="${c.google}" target="_blank" rel="noopener">Google</a><a class="link-btn" href="data:text/calendar;charset=utf-8,${encodeURIComponent(c.ics)}" download="${esc(g.title.replace(/[^\w ]+/g, ''))}.ics">Apple / Outlook (.ics)</a></div>`;
@@ -517,21 +520,34 @@ Object.assign(ACTIONS, {
   leave: (v) => {
     const g = findPlan(v);
     const hours = (slotOf(g, NOW).start - NOW) / 36e5;
+    const late = hours < 24;
+    S.leaveReason = null;
     sheet(`<div class="h3">Leave "${esc(g.title)}"?</div>
-      <p class="small" style="margin:0">Your spot goes to the next person on the waitlist, and the group sees that you can't make it.</p>
-      ${hours < 24 ? '<div class="notice warn"><b>This is a late cancel</b>It starts in less than 24 hours. Three late cancels in a month cost 50 Goodwill.</div>' : ''}
+      <p class="small" style="margin:0">Your spot opens up for the next person, and the group sees that you can't make it.</p>
+      <p class="eyebrow">Why? (optional, shown to the group)</p>
+      <div class="chips">${LEAVE_REASONS.map((r) => `<button type="button" class="chip" data-act="leave-pick" data-v="${r}">${r}</button>`).join('')}</div>
+      ${late ? `<div class="notice warn"><b>This is a late cancel</b>It starts in less than 24 hours. This would be your ${ordinal(S.lateCancels + 1)} in 30 days; the 3rd costs ${-GOODWILL_RULES.lateCancels} Goodwill. Feeling unwell or injured never counts.</div>` : ''}
       <button type="button" class="btn block" data-act="leave-confirm" data-v="${v}">Leave the plan</button>
       <button type="button" class="btn block ghost" data-act="close-sheet">Stay in</button>`);
   },
+  'leave-pick': (v, el) => { document.querySelectorAll('[data-act="leave-pick"]').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); S.leaveReason = v; },
   'leave-confirm': (v) => {
     const g = findPlan(v);
+    const late = (slotOf(g, NOW).start - NOW) / 36e5 < 24;
+    const excused = ['Feeling unwell', 'Injured'].includes(S.leaveReason);
     g.members = g.members.filter((m) => m !== 'me');
     g.interested = g.interested.filter((m) => m !== 'me');
     S.mem[v] = 'left';
-    postSys(v, `${ME.name} can't make it any more`);
+    postSys(v, `${ME.name} can't make it any more${S.leaveReason ? ` (${S.leaveReason.toLowerCase()})` : ''}`);
+    let msg = 'You left the plan. The group has been told.';
+    if (late && !excused) {
+      S.lateCancels += 1;
+      if (S.lateCancels >= 3) { addPoints(GOODWILL_RULES.lateCancels, '3 late cancels in 30 days'); S.lateCancels = 0; msg = `You left. That's 3 late cancels in 30 days: ${GOODWILL_RULES.lateCancels} Goodwill.`; }
+      else msg = `You left. Late cancel ${S.lateCancels} of 3 this month.`;
+    }
     closeSheet();
     render(true);
-    toast('You left the plan. The organiser has been told.');
+    toast(msg);
   },
   checkin: (v) => {
     const g = findPlan(v);

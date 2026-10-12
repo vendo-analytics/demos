@@ -568,17 +568,28 @@ Attendance is what Goodwill is built on, so it always needs a second person.
 ## 10. Leave and feedback
 
 **Leaving:** going → `left`. The spot goes to the first person on the waitlist, and the thread gets "Sam can't make it
-any more". Leaving within 24 hours of the start sets `late_cancel`. Three late cancels in 30 days cost −50 Goodwill.
-Organisers cancelling notifies everyone, and repeated cancellations reduce their reach.
+any more (something came up)". An optional reason (something came up, feeling unwell, injured, clashes with something)
+is shown to the group. Leaving within 24 hours of the start sets `late_cancel`, and the sheet says which one this would be
+("your 2nd in 30 days"). Three late cancels in 30 days cost −50 Goodwill. **Feeling unwell** and **injured** never count:
+nobody should turn up sick to protect their score. Organisers cancelling notifies everyone, and repeated cancellations
+reduce their reach.
 
 **Giving feedback** (prompted when the event ends, open for 7 days):
 
-- **Event rating**, 1–5 stars. Feeds the organiser's `rating_avg`.
-- **Per person:** came or no-show (counts as confirmation), good or not great, and tags.
+- **Event rating**, 1–5 stars, with words (didn't go well, not great, OK, good, great). Feeds the organiser's `rating_avg`.
+- **Per person, all optional:** came or no-show (counts as the second side of attendance when there was no roll call;
+  nothing is pre-marked), good or not great, and tags.
   - Positive tags: on time, friendly, good sport, skill as described, would play again.
   - Negative tags: late, rude, skill not as described, made me uncomfortable, asked for contact details.
 - Negative feedback is **private**: it goes to review and to the ranking, never to the person's profile.
+- Choosing "made me uncomfortable" or "asked for contact details" shows a **Report privately** link: a tag only lowers
+  matching, a report reaches a person at Keen.
 - Leaving feedback earns +20 Goodwill.
+- **After sending**, a summary accounts for every part: +20, good reviews passed on (+10 each to them, max 3 per plan),
+  "not great" kept private, no-shows pending a second report, and who you confirmed came.
+
+**Double-blind reviews:** what someone said about you is revealed when you've rated them too, or after 7 days. Nobody
+can see your review before writing theirs, so ratings can't be traded or used to retaliate.
 
 **Getting feedback:** the profile shows positive tag counts ("On time 13") and the average rating. People are told when
 they receive a good review (+10 Goodwill, max 3 per event). They're never told who gave negative feedback.
