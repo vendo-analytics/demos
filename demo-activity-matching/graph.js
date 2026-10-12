@@ -137,10 +137,11 @@ function reachHTML(g) {
     ['Asked for this', r.asked.length, `Have an open ask for ${r.activity.toLowerCase()} at this time. Told straight away.`, 'ok'],
     [`Into ${r.activity.toLowerCase()} nearby`, r.likely.length, 'List the activity, live within their travel distance, and are usually free then. Told within their weekly cap.', 'ok'],
   ];
-  const heldRows = [['Too far for them', H.far], ['Avoid something about it', H.avoid], ['Level too far apart', H.level], ['Usually busy then', H.busy], ['Already had 3 asks this week', H.cap], ['Blocked', H.blocked]].filter(([, n]) => n);
+  const heldRows = [['Too far for them', H.far], ['Avoid something about it', H.avoid], ['Level too far apart', H.level], ['Usually busy then', H.busy], ['Already had 3 asks this week', H.cap], ['Blocked', H.blocked], ['Not told because of recent feedback about you', H.trust]].filter(([, n]) => n);
   return `<div class="card"><div class="row"><p class="eyebrow grow">Who this plan reaches</p><button type="button" class="link-btn" data-act="graph-data">How</button></div>
     <div class="ledger">${rows.map(([k, n, why]) => `<div><span><b>${k}</b><br><span class="small muted">${why}</span></span><b class="num">${n}</b></div>`).join('')}</div>
     ${heldRows.length ? `<p class="small muted" style="margin:0"><b>${plural(r.heldTotal, 'person')} held back:</b> ${heldRows.map(([k, n]) => `${k.toLowerCase()} ${n}`).join(' · ')}</p>` : ''}
+    ${r.trust !== 'ok' ? `<p class="small" style="margin:0;color:var(--warn)">${r.trust === 'review' ? 'Nobody is being told about your plans while Keen reviews recent feedback.' : 'Fewer people are told about your plans for now, because of recent feedback.'} <button type="button" class="link-btn" data-act="tab" data-v="me">Why</button></p>` : ''}
     <p class="small muted" style="margin:0">You see numbers, never names, until people say they're interested.</p></div>`;
 }
 

@@ -207,7 +207,8 @@ VIEWS.compose = () => {
     ${editing ? `<p class="small muted" style="margin:0">Everyone going or interested gets a message in the thread listing what changed.</p>` : `<div class="card"><p class="eyebrow">When you post</p><div class="ledger">
       <div><span>People who asked for this, told now</span><b class="num">${reach.asked.length}</b></div>
       <div><span>Into ${esc(act.label.toLowerCase())} nearby and free then, within their weekly cap</span><b class="num">${reach.likely.length}</b></div>
-      ${reach.heldTotal ? `<div><span class="muted">Held back by their own settings (distance, avoid list, level, busy, weekly cap)</span><b class="num muted">${reach.heldTotal}</b></div>` : ''}
+      ${reach.heldTotal - reach.held.trust ? `<div><span class="muted">Held back by their own settings (distance, avoid list, level, busy, weekly cap)</span><b class="num muted">${reach.heldTotal - reach.held.trust}</b></div>` : ''}
+      ${reach.held.trust ? `<div><span class="muted">Not told because of recent feedback about you (<button type="button" class="link-btn" data-act="tab" data-v="me">why</button>)</span><b class="num muted">${reach.held.trust}</b></div>` : ''}
       <div><span>Shown in Explore and search within</span><b class="num">${d.visibility === 'invite' ? '–' : `${ME.radius || 10} km`}</b></div>
     </div></div>`}
     ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or the Regular level (200+ Goodwill). Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or the Regular level (200+ Goodwill). You have ${fmtPts(S.points)}.</p>` : ''}

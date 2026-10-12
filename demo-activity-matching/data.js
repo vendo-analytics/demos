@@ -212,12 +212,16 @@ function personFromRow([id, name, suburb, hue, joined, idVerified, interests, go
 }
 
 const PEOPLE = PEOPLE_ROWS.map(personFromRow);
+// "Not great" ratings from other people (private; see REACH_RULES in engine.js). Luca already has one from three
+// weeks ago, so one more from someone else (try Feedback) puts his plans on reduced reach.
+for (const p of [...PEOPLE]) p.badFrom = [];
+PEOPLE.find((p) => p.id === 'p4').badFrom = [{ from: 'p18', at: new Date(Date.now() - 21 * 864e5) }];
 const FRIENDS = FRIEND_ROWS.map(personFromRow);
 
 // The signed-in user. Login is out of scope; the onboarding chat can overwrite what they entered.
 // Their counts (events, hosted, Goodwill, tags) are derived from HISTORY and the ledger at runtime.
 const ME = {
-  id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, joined: 'Feb 2026',
+  id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, joined: 'Feb 2026', badFrom: [],
   bio: 'Padel most weekends, learning to surf.',
   phone: '+61412345678', phoneVerified: true, photo: true, idVerified: false,
   interests: ['padel', 'surfing', 'running', 'boardgames', 'language'],

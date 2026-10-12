@@ -254,6 +254,29 @@ create table person_feedback (
   check (from_id <> to_id)
 );
 
+-- Reach standing from "not great" ratings (MODEL.md §10.1): distinct, non-harsh raters in the last 90 days.
+-- 2-3 = reduced reach, 4+ = under review. Read by the reach query and the feed; shown only to the person themselves.
+create view user_reach as
+with rater_stats as (
+  select from_id,
+         count(*) filter (where vibe is not null)           as rated,
+         count(*) filter (where vibe = 'bad')               as rated_bad
+  from person_feedback group by from_id
+), counted as (
+  select f.to_id, count(distinct f.from_id) as bad_raters, max(f.created_at) as last_bad_at
+  from person_feedback f
+  join rater_stats r on r.from_id = f.from_id
+  where f.vibe = 'bad' and f.came is not false and f.created_at > now() - interval '90 days'
+    and not (r.rated >= 4 and r.rated_bad * 2 > r.rated)    -- harsh raters don't count
+  group by f.to_id
+)
+select u.id as user_id, coalesce(c.bad_raters, 0) as bad_raters, c.last_bad_at,
+       case when coalesce(c.bad_raters, 0) >= 4 then 'review'
+            when coalesce(c.bad_raters, 0) >= 2 then 'reduced'
+            else 'ok' end as standing
+from users u left join counted c on c.to_id = u.id;
+-- Not shown: lifting after 3 clean plans in a row needs the organiser's plan sequence; done in the service.
+
 create table goodwill_ledger (
   id         bigserial primary key,
   user_id    uuid not null references users(id),

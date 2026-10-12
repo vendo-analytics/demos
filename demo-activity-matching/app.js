@@ -373,7 +373,7 @@ VIEWS.fbDone = ({ v: id }) => {
     <div class="card"><div class="ledger">
       <div><span>For leaving feedback</span><b class="num">+${GOODWILL_RULES.feedbackGiven}</b></div>
       ${r.good.length ? `<div><span>Good reviews sent to ${esc(names(r.good))}; they get +${GOODWILL_RULES.goodReview} each</span><b class="num">${r.good.length}</b></div>` : ''}
-      ${r.bad.length ? `<div><span>"Not great" for ${esc(names(r.bad))}: private, lowers how often you're matched</span><b class="num">${r.bad.length}</b></div>` : ''}
+      ${r.bad.length ? `<div><span>"Not great" for ${esc(names(r.bad))}: private. You're matched with them less, and if someone else says the same, their plans reach fewer people</span><b class="num">${r.bad.length}</b></div>` : ''}
       ${r.noshow.length ? `<div><span>No-show for ${esc(names(r.noshow))}: counts only with a second report</span><b class="num">${r.noshow.length}</b></div>` : ''}
       ${r.came.length ? `<div><span>You confirmed ${esc(names(r.came))} came; +50 each</span><b class="num">${r.came.length}</b></div>` : ''}
     </div></div>
@@ -547,6 +547,11 @@ const ACTIONS = {
     const people = Object.entries(S.fb.people);
     S.feedbackDone = true;
     for (const [pid, st] of people) if (st.came !== false && st.vibe) S.ratings[pid] = st.vibe;
+    // A "not great" also counts towards their reach across Keen, once someone else has said the same (REACH_RULES)
+    for (const [pid, st] of people) {
+      const p = PERSON[pid];
+      if (st.came !== false && st.vibe === 'bad' && p && !(p.badFrom ||= []).some((r) => r.from === 'me')) p.badFrom.push({ from: 'me', at: new Date() });
+    }
     CTX = null;
     g.rated = S.fb.stars;
     g.confirmed = true;
@@ -831,6 +836,7 @@ const NOTES = {
       <li>Tags instead of free text keep it quick and harder to abuse. Negative tags stay private and go to review.</li>
       <li>Two independent no-show reports cost 150 Goodwill. Nothing is pre-marked: you only mark the people you're sure about.</li>
       <li>Reviews are double-blind: you see what someone said about you once you've rated them, or after 7 days.</li>
+      <li>One "not great" only changes your own matches. Two or more from different people in 90 days halve how many people someone's plans reach and rank them lower; four or more stop pushes until a person reviews it. Try rating Luca "Not great": someone already has, so his Friday 6-a-side now reaches fewer people.</li>
       <li>Picking "Made me uncomfortable" offers a private report. A tag only changes matching; a report reaches a person.</li>
       <li>Ratings feed matching. People you rated well, and who rated you well, rank higher next time. This is the "platform that learns from your experience".</li>
     </ul>`,
@@ -873,7 +879,8 @@ const FLOWS = [
   ['Feedback', () => { S.fb = null; S.tab = 'activity'; S.stack = [{ name: 'feedback', v: 'past1' }]; render(); }, (n) => n === 'feedback'],
   ['History', () => { S.tab = 'me'; S.stack = [{ name: 'history' }]; render(); }, (n) => n === 'history'],
   ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
-  ['Me', () => setTab('me'), (n) => n === 'me'],
+  ['Me', () => { ME.badFrom = []; CTX = null; setTab('me'); }, (n) => n === 'me' && trustState(ME, NOW).level === 'ok'],
+  ['Reduced reach', () => { ME.badFrom = [{ from: 'p9', at: new Date(+NOW - 12 * 864e5) }, { from: 'p13', at: new Date(+NOW - 3 * 864e5) }]; CTX = null; setTab('me'); }, (n) => n === 'me' && trustState(ME, NOW).level !== 'ok'],
   ['Profile data', () => { S.tab = 'me'; S.stack = [{ name: 'profileData' }]; render(); }, (n) => n === 'profileData'],
   ['Your graph', () => { S.tab = 'me'; S.gsel = null; S.stack = [{ name: 'graph' }]; render(); }, (n) => n === 'graph'],
   ['Graph data', () => { S.tab = 'me'; S.stack = [{ name: 'graph' }, { name: 'graphData' }]; render(); }, (n) => n === 'graphData'],

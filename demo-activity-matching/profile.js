@@ -116,12 +116,21 @@ function profileBodyHTML(p) {
 
 // ---------- Me ----------
 
+// Shown only to you, only when it applies: why your plans reach fewer people, and how it lifts. Never who.
+function reachNoticeHTML() {
+  const t = trustState(ME, NOW);
+  if (t.level === 'ok') return '';
+  if (t.level === 'review') return `<div class="notice bad"><b>Your plans aren't being sent to anyone right now</b><span>Several people rated recent plans "not great". A person at Keen is looking at it and will message you within 2 days. Your plans still show in Explore and search, and you can join plans as normal.</span></div>`;
+  return `<div class="notice warn"><b>Your plans reach fewer people for now</b><span>Two people rated recent plans "not great". You aren't told who, and nobody else can see this. Your plans still show in Explore and search; about half as many people get told about them.</span><span>It lifts after 3 plans in a row without a "not great", or 90 days after the last one.</span></div>`;
+}
+
 VIEWS.me = () => {
   const me = profileOf('me');
   const lvl = levelFor(S.points), nx = nextLevel(S.points);
   const pct = nx ? ((S.points - lvl.min) / (nx.min - lvl.min)) * 100 : 100;
   const R = GOODWILL_RULES;
   return bar('Me', false, `<button type="button" class="btn sm ghost" data-act="profile-data">Edit profile</button>`) + `<div class="pad">
+    ${reachNoticeHTML()}
     <p class="small muted" style="margin:0">Your profile, as others see it</p>
     ${posterHTML(me, { card: true })}
     ${profileBodyHTML(me)}

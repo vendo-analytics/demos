@@ -304,9 +304,11 @@ function match(intent, opts = {}) {
   const empty = { people: [], plans: [], passive: [], suggestion: null };
   if (!intent.activity || intent.flags.length) return empty;
 
+  // People under review aren't suggested to strangers; reduced reach ranks them lower
   const people = OPEN_ASKS
     .map((ask) => ({ ask, person: PERSON[ask.who], fit: scoreFit(intent, ask, now) }))
-    .filter((x) => x.fit)
+    .filter((x) => x.fit && trustState(x.person, now).level !== 'review')
+    .map((x) => { if (trustState(x.person, now).level === 'reduced') x.fit.score -= REACH_RULES.matchPenalty; return x; })
     .sort((a, b) => b.fit.score - a.fit.score);
 
   const plans = PLANS
@@ -428,7 +430,10 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   const social = Math.min(1, friends.reduce((k, m) => k + ctx.played[m] + (rated[m] === 'good' ? 1 : 0), 0) / 3);
   const dislike = [plan.org, ...plan.members].some((m) => rated[m] === 'bad') ? 0.15 : 0;
   const goal = goalFit(profile.goals || [], plan, act, venue);
-  const score = 0.28 * interest + 0.11 * soon + 0.08 * momentum + 0.08 * trust + 0.11 * levelFit + 0.12 * freeFit + 0.14 * social + 0.08 * goal.score - dislike;
+  // Hidden from the viewer: an organiser with repeated "not great" ratings from others ranks lower
+  const orgTrust = plan.org === profile.id ? 'ok' : trustState(PERSON[plan.org], now).level;
+  const trustPenalty = REACH_RULES.feedPenalty[orgTrust] || 0;
+  const score = 0.28 * interest + 0.11 * soon + 0.08 * momentum + 0.08 * trust + 0.11 * levelFit + 0.12 * freeFit + 0.14 * social + 0.08 * goal.score - dislike - trustPenalty;
 
   const BUCKET_LABEL = { 'wd-am': 'weekday mornings', 'wd-pm': 'weekday evenings', 'we-am': 'weekend mornings', 'we-pm': 'weekend afternoons' };
   const edges = [
@@ -759,6 +764,18 @@ function duplicatePlans(draft, plans, now = new Date()) {
   });
 }
 
+// ---------- trust: reach after repeated "not great" ratings ----------
+// One "not great" only changes what the person who gave it sees. Two or more from different people in 90 days
+// lower how far someone reaches across Keen; four or more stop pushes until a person at Keen has looked.
+// Raters who rate most people badly (harsh) don't count. Nobody is ever told who rated them.
+const REACH_RULES = { reduceAt: 2, reviewAt: 4, windowDays: 90, reducedShare: 0.5, feedPenalty: { reduced: 0.1, review: 0.2 }, matchPenalty: 0.12 };
+
+function trustState(person, now = new Date()) {
+  const recent = ((person && person.badFrom) || []).filter((r) => (now - r.at) / 864e5 <= REACH_RULES.windowDays && !(PERSON[r.from] && PERSON[r.from].harsh));
+  const n = new Set(recent.map((r) => r.from)).size;
+  return { n, level: n >= REACH_RULES.reviewAt ? 'review' : n >= REACH_RULES.reduceAt ? 'reduced' : 'ok' };
+}
+
 // ---------- the other direction: which people a plan reaches ----------
 
 // Walks the same edges from the plan's side. Each person is checked against their own private fields
@@ -790,7 +807,12 @@ function reachForEvent(plan, opts = {}) {
     if ((p.asksThisWeek || 0) >= (p.askCap || 3)) { held.cap++; continue; }
     likely.push(p);
   }
-  return { asked, likely, held, heldTotal: Object.values(held).reduce((a, b) => a + b, 0), activity: act.label };
+  // The organiser's own standing: reduced reach tells half the might-be-keen people; under review, nobody is pushed
+  const trust = trustState(PERSON[plan.org], now);
+  held.trust = 0;
+  if (trust.level === 'reduced') { const keep = Math.ceil(likely.length * REACH_RULES.reducedShare); held.trust = likely.length - keep; likely.length = keep; }
+  if (trust.level === 'review') { held.trust = likely.length + asked.length; likely.length = 0; asked.length = 0; }
+  return { asked, likely, held, heldTotal: Object.values(held).reduce((a, b) => a + b, 0), activity: act.label, trust: trust.level };
 }
 
 // Directions links. Coordinates go to the maps app; nothing about the person is sent.
@@ -846,5 +868,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { calendarLinks, duplicatePlans, FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { trustState, REACH_RULES, calendarLinks, duplicatePlans, FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

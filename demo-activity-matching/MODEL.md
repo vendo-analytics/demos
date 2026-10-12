@@ -287,8 +287,13 @@ activity (an open ask for it at that time, or `INTERESTED_IN`):
 | Fewer than *their* weekly ask cap (default 3) this week | held back: cap |
 | Otherwise → **told within their cap** | – |
 
+Then the organiser's own standing (§10.1): on **reduced reach**, only half of the "told within their cap" people are
+told; **under review**, nobody is pushed, including people who asked. The plan still shows in
+Explore and search either way.
+
 The organiser sees counts only ("Asked for this 1 · Into padel nearby 3 · 7 held back: too far 1, level 1, busy 5"),
-never names, until people say they're interested.
+never names, until people say they're interested. Their own "not told because of recent feedback" count is shown only
+to them.
 
 ### 3.5 How the graph learns
 
@@ -447,6 +452,7 @@ Then adjustments, each shown to the person as a reason or an edge in the "why" g
 
 ```
       - 0.15 someone you rated badly is organising or going (they're never told)
+      - 0.10 the organiser is on reduced reach (§10.1), 0.20 under review; not shown as a reason
       - 0.30 overlaps a plan you're going to, hosting or have asked to join   → "Clashes with Saturday padel ladder"
       - 0.12 per "Show fewer <activity>" you've tapped
       - 0.20 the plan is full (only a waitlist left)
@@ -588,6 +594,27 @@ reduce their reach.
 - Leaving feedback earns +20 Goodwill.
 - **After sending**, a summary accounts for every part: +20, good reviews passed on (+10 each to them, max 3 per plan),
   "not great" kept private, no-shows pending a second report, and who you confirmed came.
+
+### 10.1 When several people say "not great"
+
+One "not great" only changes what the person who gave it sees (§6). Repeated ones from **different** people change
+how far someone reaches across Keen:
+
+| Distinct people, last 90 days | Standing | Effect |
+| --- | --- | --- |
+| 0–1 | OK | None beyond each rater's own matches |
+| 2–3 | **Reduced reach** | Half as many might-be-keen people told about their plans (§3.4); their plans rank 0.10 lower in other people's feeds; as a person they rank lower in matches |
+| 4+ | **Under review** | No pushes at all and not suggested to strangers; plans stay in Explore and search; a person at Keen reviews within 2 days |
+
+Fairness rules:
+
+- Only ratings from people confirmed at the same plan count, one per rater, however many plans they shared.
+- **Harsh raters** don't count: someone who rates more than half the people they rate "not great" (with 4 or more ratings).
+- It lifts after 3 plans in a row without a "not great", or 90 days after the last one.
+- The person is told, plainly, on their Me tab and on their plans' reach card, never who. Nobody else can see it, and it
+  never appears on a profile.
+- "Made me uncomfortable" and "asked for contact details" still go to review as reports on their own; this rule is about
+  quality, not safety.
 
 **Double-blind reviews:** what someone said about you is revealed when you've rated them too, or after 7 days. Nobody
 can see your review before writing theirs, so ratings can't be traded or used to retaliate.
