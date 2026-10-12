@@ -72,15 +72,15 @@ function autoTitle() {
   d.title = d.day != null ? `${cap(DOW[new Date(d.day).getDay()])} ${act.toLowerCase()}` : `${act} meetup`;
 }
 
-function draftIntent(d) {
+// The draft as a plan, so the graph can work out who it would reach.
+function draftPlan(d) {
   const day = new Date(d.day != null ? d.day : d.days[0]);
   const start = d.start != null ? d.start : d.window[0];
   const end = d.start != null ? d.start + d.dur : d.window[1];
   const v = VENUE[d.venueId];
-  const place = v ? v.suburb : PLACE[d.placeName] ? d.placeName : ME.suburb;
   return {
-    raw: d.raw, activity: ACT[d.act], place: { name: place, radius: ME.radius || 10, remote: false }, time: { slots: [{ start: at(day, start), end: at(day, end) }], label: '' },
-    party: { have: d.have, seek: d.seek }, skill: d.skill, role: null, flags: [], missing: [],
+    id: d.editingId || 'draft', org: 'me', act: d.act, venueId: v ? v.id : null, place: v ? v.suburb : PLACE[d.placeName] ? d.placeName : ME.suburb,
+    alcohol: !!(v && v.alcohol), slots: [{ start: at(day, start), end: at(day, end) }], members: ['me'], size: d.have + d.seek, skill: d.skill,
   };
 }
 
@@ -139,7 +139,7 @@ VIEWS.compose = () => {
   }
   const act = ACT[d.act];
   const c = draftCheck(d);
-  const reach = match(draftIntent(d), { now: NOW });
+  const reach = reachForEvent(draftPlan(d), { now: NOW, blocked: S.hidden });
   const v = VENUE[d.venueId];
   const wide = d.window[0] === 7 && d.window[1] === 21;
   let times = START_TIMES.filter((h) => wide || (h >= d.window[0] && h <= d.window[1] - 0.5));
@@ -170,8 +170,9 @@ VIEWS.compose = () => {
     <label class="toggle"><input type="checkbox" id="draftApprove" data-act="d-approve" ${d.approve ? 'checked' : ''}>I confirm who joins</label>
     <section class="field"><h3 class="h3">Who can find it</h3><span class="seg"><button type="button" data-act="d-vis" data-v="public" aria-pressed="${d.visibility === 'public'}">Anyone nearby</button><button type="button" data-act="d-vis" data-v="invite" aria-pressed="${d.visibility === 'invite'}">Only people I invite</button></span></section>
     ${editing ? `<p class="small muted" style="margin:0">Everyone going or interested gets a message in the thread listing what changed.</p>` : `<div class="card"><p class="eyebrow">When you post</p><div class="ledger">
-      <div><span>People with a matching ask, told now</span><b class="num">${reach.people.length}</b></div>
-      <div><span>People who might be keen, within their 3-a-week cap</span><b class="num">${reach.passive.length}</b></div>
+      <div><span>People who asked for this, told now</span><b class="num">${reach.asked.length}</b></div>
+      <div><span>Into ${esc(act.label.toLowerCase())} nearby and free then, within their weekly cap</span><b class="num">${reach.likely.length}</b></div>
+      ${reach.heldTotal ? `<div><span class="muted">Held back by their own settings (distance, avoid list, level, busy, weekly cap)</span><b class="num muted">${reach.heldTotal}</b></div>` : ''}
       <div><span>Shown in Explore and search within</span><b class="num">${d.visibility === 'invite' ? '–' : `${ME.radius || 10} km`}</b></div>
     </div></div>`}
     ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or the Regular level (200+ Goodwill). Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or the Regular level (200+ Goodwill). You have ${fmtPts(S.points)}.</p>` : ''}
@@ -327,14 +328,14 @@ Object.assign(ACTIONS, {
     if (d.editingId) { saveEdit(d); return; }
     const day = new Date(d.day);
     const v = VENUE[d.venueId];
-    const reach = match(draftIntent(d), { now: NOW });
+    const reach = reachForEvent(draftPlan(d), { now: NOW, blocked: S.hidden });
     const id = 'mine' + (S.myPlans.length + 1);
     const plan = {
       id, mine: true, posted: true, org: 'me', act: d.act, title: d.title.trim(), venueId: v.id, venue: v.name, place: v.suburb, alcohol: !!v.alcohol,
       meet: d.meet.trim(), directions: d.directions.trim(), bring: d.bring.trim(), note: d.note.trim(),
       slots: [{ start: at(day, d.start), end: at(day, d.start + d.dur) }], members: ['me', ...FRIENDS.slice(0, d.have - 1).map((f) => f.id)], interested: [],
       size: d.have + d.seek, skill: d.skill, approve: d.approve, status: 'open', visibility: d.visibility,
-      sent: reach.people.length + reach.passive.length, seen: 0, keen: 0, passed: 0, requests: [], clonedFrom: d.clonedFrom || null,
+      sent: reach.asked.length + reach.likely.length, seen: 0, keen: 0, passed: 0, requests: [], clonedFrom: d.clonedFrom || null,
     };
     S.myPlans.unshift(plan);
     S.chat[id] = [{ sys: true, text: `Plan posted. People who are interested or going can chat here.${plan.members.length > 1 ? ` ${plan.members.slice(1).map((m) => PERSON[m].name).join(' and ')} ${plan.members.length > 2 ? 'are' : 'is'} in with you.` : ''}`, at: new Date() }];
@@ -343,8 +344,8 @@ Object.assign(ACTIONS, {
     S.tab = 'activity';
     S.stack = [{ name: 'plan', v: id }];
     render();
-    toast(`Posted. ${plural(reach.people.length, 'person')} told now; it's in Explore within ${ME.radius || 10} km.`);
-    simulateRequests(plan, [...reach.people.map((x) => x.person.id), ...reach.passive.map((p) => p.id)]);
+    toast(`Posted. ${plural(reach.asked.length + reach.likely.length, 'person')} told; it's in Explore within ${ME.radius || 10} km.`);
+    simulateRequests(plan, [...reach.asked, ...reach.likely].map((p) => p.id));
   },
   approve: (v) => {
     const [gid, pid] = v.split(':');

@@ -712,3 +712,20 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .poster:has(.poster-face) .poster-i { display: none; }
 .poster:has(.poster-face) .poster-shade { background: linear-gradient(to bottom, transparent 45%, rgb(0 0 0 / 0.55) 100%); }
 .art.has-photo .art-word, .art.has-photo::after { display: none; }
+
+/* ---------- your graph ---------- */
+.yg-card { padding: 8px; }
+.yg { display: block; width: 100%; height: auto; }
+.yg-edge { opacity: 0.35; stroke-linecap: round; }
+.yg-edge.dashed { stroke-dasharray: 4 5; opacity: 0.55; }
+.yg-edge.sel { opacity: 0.9; }
+.yg-node { cursor: pointer; }
+.yg-dot { stroke: var(--card); stroke-width: 3; }
+.yg-dot.sel { stroke: var(--ink); stroke-width: 3; }
+.yg-x { stroke: #FFFFFF; stroke-width: 2.4; stroke-linecap: round; }
+.yg-label { fill: var(--ink); font-family: var(--body); font-size: 11.5px; font-weight: 600; }
+.yg-me { fill: var(--ink); stroke: var(--card); stroke-width: 3; }
+.yg-me-t { fill: var(--card); font-family: var(--display); font-size: 24px; font-weight: 700; }
+.yg-key { display: inline-flex; align-items: center; gap: 6px; }
+.yg-key i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.act-row .grow { flex: 1; min-width: 0; }

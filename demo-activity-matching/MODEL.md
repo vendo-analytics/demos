@@ -206,47 +206,97 @@ Columns: `status`, `joined_at`, `left_at`, `late_cancel` (bool), `checked_in_at`
 
 ## 3. The graph that brings people to events
 
-Everything is stored in Postgres (`schema.sql`). The "graph" is how the tables are read: as nodes and edges, with
-recommendations and search found as paths from a person to an event.
+Everything is stored in Postgres (`schema.sql`). The "graph" is how the tables are read: as nodes and edges, walked in
+**two directions** with the same rules:
 
-### Nodes
+- **You → plans:** feed, search, browse and "why you're seeing this" (§4–6).
+- **Plan → people:** who a newly posted plan reaches (§3.4).
 
-Person · Activity · Category · Suburb · Venue · TimeBucket (`wd-am` … `we-pm`) · Trait · Event · Ask
+In the prototype, **Me → Your graph** draws every edge from you, weighted, and **Graph data** lists every node and edge type
+with live counts. Both are driven by `NODE_TYPES` and `EDGE_TYPES` in `graph.js`.
 
-### Edges
+### 3.1 Nodes
 
-| Edge | Created by | Used for |
+| Node | What it is | Demo count |
 | --- | --- | --- |
-| Person **INTERESTED_IN** Activity `{level}` | Onboarding, profile edits | Matching, levels |
-| Person **ATTENDED** Activity `{count}` | Confirmed attendance | Weighting what they actually turn up to over what they only list |
-| Person **LIVES_IN** Suburb `{radius}` | Onboarding | Distance |
-| Person **FREE_AT** TimeBucket | Onboarding | Time fit |
-| Person **AVOIDS** Trait | Onboarding | Hard filter (held back with a count, never silently dropped) |
-| Person **MEMBER_OF** Event `{status}` | Interest, join, leave | Threads, "who's going" |
-| Person **PLAYED_WITH** Person `{count, last_at}` | Two people both attended the same event | Social ranking ("Mia is going") |
-| Person **RATED** Person `{tags, private}` | Feedback | Trust, social ranking, and penalties for bad experiences |
-| Person **BLOCKED** Person | Report or block | Hard filter both ways |
-| Event **IS** Activity · **AT** Venue (**IN** Suburb) · **IN_BUCKET** TimeBucket · **HAS** Trait | Event creation | All of the above |
-| Ask **WANTS** Activity · **NEAR** Suburb · **DURING** TimeSlot | Asking | Matching asks to asks and events |
+| Person | A member | 34 |
+| Activity | A tag from the fixed list | 20 |
+| Category | Groups activities for "similar" matches (racquet sports, team sports…) | 11 |
+| Suburb | Where people live and venues are | 15 |
+| Venue | A public place where plans happen | 15 |
+| Time bucket | `wd-am`, `wd-pm`, `we-am`, `we-pm` | 4 |
+| Trait | water, heights, alcohol, contact, late, early, big | 7 |
+| Goal | fitness, friends, learn, compete, outdoors, unwind | 6 |
+| Plan | An event | – |
+| Ask | An open request in plain English | – |
 
-### A path, read as an explanation
+### 3.2 Edges
+
+| Edge | From → to | Created by | Weight | Who sees it | Used for |
+| --- | --- | --- | --- | --- | --- |
+| `INTERESTED_IN` | Person → Activity | Onboarding, profile edits | Level; 0.75 base | Public, with level | Feed, search, reach |
+| `ATTENDED` | Person → Activity | Confirmed attendance only | +0.05 per plan, max 1 | Counts only | What you turn up to beats what you list |
+| `LIVES_IN` | Person → Suburb | Onboarding | Distance ÷ travel radius | Suburb public, radius private | Distance filter, both directions |
+| `FREE_AT` | Person → Time bucket | Onboarding | 1 if free, 0.3 if not | Private | Feed ranking; reach holds back people busy then |
+| `AVOIDS` | Person → Trait | Onboarding | Hard filter | Private | Plans held back with a count; reach skips them |
+| `WANTS` | Person → Goal | Onboarding | +0.08 when a plan suits a goal | Private | Feed ranking |
+| `MEMBER_OF` | Person → Plan | Interested, join, leave | Status | Who's going is public; interested is a count | Threads, who's going, momentum |
+| `PLAYED_WITH` | Person → Person | Both had confirmed attendance at the same plan | Plans together ÷ 3, +1 for a good rating, capped at 1 | Only the two people | "Mia is going", feed ranking |
+| `RATED` | Person → Person | Feedback after a plan | Good strengthens PLAYED_WITH; bad lowers plans with that person by 0.15, silently | Private | Feed ranking |
+| `BLOCKED` | Person → Person | Report or block | Hard filter, both ways | Private | Feed, search, browse, reach, matches |
+| `IS`, `AT`, `IN`, `HAS` | Plan → Activity, Venue, Time bucket, Trait | Creating or editing a plan | – | Public | Every match |
+| `ASKS_FOR` | Ask → Activity, Suburb, Time slots | Asking in plain English | – | Private until matched | Ask matching; reach ("asked for this") |
+
+Two rules hold for every edge:
+
+1. **Only confirmed attendance builds edges.** `ATTENDED` and `PLAYED_WITH` ignore plans nobody has confirmed, the same
+   rule as the profile's numbers. Unconfirmed check-ins and plans waiting for a roll call don't count yet.
+2. **Private edges never leak.** Goals, avoids, free times, ratings and blocks shape results, but nobody else can see them.
+   Reasons based on them ("Good for getting fitter") are shown only to their owner.
+
+### 3.3 You → plans
+
+The path from a person to a plan, read as an explanation:
 
 ```
-You ──been 3×──▶ Padel ◀──is── Saturday padel ladder
-You ──2 km─────▶ Freshwater ◀──at── (venue)
-You ──free─────▶ weekend mornings ◀──in── (Sat 8am)
+You ──been 2×──────▶ Padel ◀──is── Saturday padel ladder
+You ──2 km─────────▶ Freshwater ◀──at── (venue)
+You ──free─────────▶ weekend mornings ◀──in── (Sat 8am)
 You ──played with──▶ Olivia ──going──▶ Saturday padel ladder
+You ──wants────────▶ Get fitter ◀──suits── (padel is a sport)
 ```
 
-The event page draws this as **Why you're seeing this**. Every edge that made a plan rank highly is visible, and a dashed
-edge marks the weak ones.
+The scoring that ranks these paths is in §6. The event page draws the path as **Why you're seeing this**.
 
-### How the graph learns
+Hard filters run first: plans with a trait you avoid are held back (with a count shown), and plans organised or attended
+by someone blocked in either direction are removed.
 
-- Attending an activity strengthens **ATTENDED**, which outweighs a listed interest.
-- Good feedback both ways strengthens **PLAYED_WITH**. Negative feedback suppresses that person in your recommendations and theirs.
-- Repeatedly ignoring an activity's recommendations decays its weight (post-MVP).
-- Self-rated levels shift after three or more "skill as described" or "skill not as described" tags.
+### 3.4 Plan → people (reach)
+
+When a plan is posted or edited, Keen walks the same edges from the plan's side. For every person with an edge to the
+activity (an open ask for it at that time, or `INTERESTED_IN`):
+
+| Check, in order | Fails → |
+| --- | --- |
+| Not blocked by or blocking the organiser | held back: blocked |
+| Venue within *their* travel radius | held back: too far |
+| No trait on *their* avoid list | held back: avoid |
+| Their level for the activity within 1 step of the plan's level | held back: level |
+| Has an open ask that overlaps → **told now**, no cap | – |
+| Plan's time bucket in *their* free times | held back: busy |
+| Fewer than *their* weekly ask cap (default 3) this week | held back: cap |
+| Otherwise → **told within their cap** | – |
+
+The organiser sees counts only ("Asked for this 1 · Into padel nearby 3 · 7 held back: too far 1, level 1, busy 5"),
+never names, until people say they're interested.
+
+### 3.5 How the graph learns
+
+- A confirmed plan strengthens `ATTENDED` for that activity and adds or strengthens `PLAYED_WITH` for everyone there.
+- A good rating adds +1 to that `PLAYED_WITH` weight. A bad rating quietly lowers plans with that person; they're never told.
+- Blocking removes them from each other's results entirely.
+- Post-MVP: decay for activities whose recommendations are repeatedly ignored, and self-rated levels nudged after three or
+  more "skill as described" or "not as described" tags.
 
 ## 4. Search
 

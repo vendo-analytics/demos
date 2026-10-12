@@ -5,7 +5,7 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const trunc = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const fmtPts = (n) => n.toLocaleString('en-AU');
-const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const plural = (n, w) => `${n} ${n === 1 ? w : w === 'person' ? 'people' : `${w}s`}`;
 
 const EXAMPLES = [
   "Padel Saturday morning in Manly, we're two looking for two more",
@@ -29,6 +29,8 @@ const S = {
   mem: {}, // my membership per event: interested | requested | waitlist | going | checked_in | attended | left
   read: {}, // messages read per thread
   replyTo: null,
+  ratings: {}, // RATED edges from feedback you gave: person -> 'good' | 'bad' (private)
+  gsel: null,
   rc: null,
   ex: { q: '', act: null, day: null, drop: {} },
   hidden: new Set(),
@@ -505,6 +507,8 @@ const ACTIONS = {
   'fb-tag': (v) => { const i = v.indexOf(':'); const p = v.slice(0, i), tg = v.slice(i + 1); const t = S.fb.people[p].tags; t.includes(tg) ? t.splice(t.indexOf(tg), 1) : t.push(tg); render(true); },
   'fb-submit': () => {
     S.feedbackDone = true;
+    for (const [pid, st] of Object.entries(S.fb.people)) if (st.came && st.vibe) S.ratings[pid] = st.vibe;
+    CTX = null;
     PAST_PLANS[0].rated = S.fb.stars;
     PAST_PLANS[0].confirmed = true;
     addPoints(20, 'Left feedback: Friday 6-a-side');
@@ -534,6 +538,7 @@ const ACTIONS = {
   'report-pick': (v, el) => { el.setAttribute('aria-pressed', el.getAttribute('aria-pressed') === 'true' ? 'false' : 'true'); },
   'report-send': (v) => {
     S.hidden.add(v);
+    CTX = null;
     toast(`Reported. You won't see ${PERSON[v].name} again.`);
     if (view().name === 'person') back(); else render();
   },
@@ -690,6 +695,25 @@ const NOTES = {
       <li>"Invite" only appears when there's something to invite them to: your ask (coming from matches) or a plan you're hosting.</li>
     </ul>`,
   },
+  graph: {
+    title: 'The graph, from your side',
+    body: `<ul>
+      <li>Every line is an edge Keen uses to rank plans for you. Thickness is its weight: activities you actually turn up to outweigh ones you only list; people you've played with (and rated well) outweigh everyone else.</li>
+      <li>Dashed lines are private filters: goals nudge, avoids hold plans back, blocks hide people both ways.</li>
+      <li>Only <b>confirmed</b> attendance builds edges, the same rule as the numbers on your profile.</li>
+      <li>Try it: rate someone after a plan, or block someone from their profile, then come back. The graph and your feed change.</li>
+      <li>Nobody else sees this view. Others see your public profile only.</li>
+    </ul>`,
+  },
+  graphData: {
+    title: 'Graph data',
+    body: `<ul>
+      <li>10 node types and 12 edge types, all in ordinary Postgres tables (see <code>schema.sql</code>). Two derived edges, PLAYED_WITH and ATTENDED, are materialised views.</li>
+      <li>The same edges are walked in two directions: from a person to plans (feed, search, "why you're seeing this") and from a plan to people (who it reaches when posted).</li>
+      <li>Every person's private settings are respected in both directions: a plan never reaches someone who avoids its traits, lives too far, is far off in level, is usually busy then, or has had 3 asks this week.</li>
+      <li>MODEL.md §3 has the same tables with weights and formulas.</li>
+    </ul>`,
+  },
   planData: {
     title: 'Plan fields',
     body: `<ul>
@@ -780,6 +804,8 @@ const FLOWS = [
   ['Profile', () => { S.stack = [{ name: 'person', v: 'p1' }]; render(); }, (n) => n === 'person'],
   ['Me', () => setTab('me'), (n) => n === 'me'],
   ['Profile data', () => { S.tab = 'me'; S.stack = [{ name: 'profileData' }]; render(); }, (n) => n === 'profileData'],
+  ['Your graph', () => { S.tab = 'me'; S.gsel = null; S.stack = [{ name: 'graph' }]; render(); }, (n) => n === 'graph'],
+  ['Graph data', () => { S.tab = 'me'; S.stack = [{ name: 'graph' }, { name: 'graphData' }]; render(); }, (n) => n === 'graphData'],
 ];
 
 function renderNotes() {

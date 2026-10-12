@@ -140,6 +140,7 @@ VIEWS.me = () => {
       <div class="gw-bar"><div style="width:${pct}%"></div></div>
       <span class="small muted">${nx ? `${fmtPts(nx.min - S.points)} to ${nx.name}` : 'Top level'}</span>
     </div>
+    <article class="card tap" data-act="graph"><div class="row"><div class="grow"><div class="h3">Your graph</div><p class="small muted" style="margin:2px 0 0">The activities, people, places and times Keen connects you with, and how strongly.</p></div><span class="link-btn">Open</span></div></article>
     <div class="card"><div class="row"><div class="h3 grow">History</div><button type="button" class="link-btn" data-act="history">See all ${historyItems().length}</button></div>
       <div>${historyItems().slice(0, 3).map(historyRowHTML).join('')}</div></div>
     <div class="card"><div class="h3">Recent Goodwill</div><div class="ledger">${S.ledger.slice(0, 6).map((l) => `<div><span>${esc(l.text)}</span><span class="${l.pts > 0 ? 'plus' : 'minus'}">${l.pts > 0 ? '+' : ''}${l.pts}</span></div>`).join('')}

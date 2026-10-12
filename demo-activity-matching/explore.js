@@ -65,7 +65,7 @@ function exploreHomeHTML() {
   const { shown, hidden } = rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow() });
   const recs = shown.filter((x) => !myStatus(x.plan));
   const weekend = recs.filter((x) => [0, 6].includes(x.slot.start.getDay()) && (x.slot.start - NOW) / 864e5 < 7);
-  const idx = browseIndex(ME, openEvents(), NOW);
+  const idx = browseIndex(ME, openEvents(), NOW, ctxNow());
   const days = Array.from({ length: 7 }, (_, i) => +startOfDay(new Date(+NOW + i * 864e5)));
   const acts = ACTIVITIES.filter((a) => a.cat !== 'service');
   const withPlans = acts.filter((a) => idx.byAct[a.id]).sort((a, b) => idx.byAct[b.id] - idx.byAct[a.id]);

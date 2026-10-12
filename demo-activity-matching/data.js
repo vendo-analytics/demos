@@ -199,6 +199,13 @@ function personFromRow([id, name, suburb, hue, joined, idVerified, interests, go
   const share = [0.85, 0.75, 0.6, 0.4, 0.55];
   p.tags = Object.fromEntries(POSITIVE_TAGS.map((t, i) => [t, Math.round(p.reviews * share[i] * (0.85 + (hashOf(id + t) % 30) / 100))]));
   // Goodwill follows the published rules: per plan +50 attended, +20 feedback, ~+20 reviews.
+  // Private fields (never shown) that the graph uses when someone else's plan might reach them.
+  const h = hashOf(id);
+  p.radius = [5, 10, 10, 20][h % 4];
+  p.free = [['wd-am', 'we-am'], ['wd-pm', 'we-am'], ['wd-pm', 'we-pm'], ['we-am', 'we-pm'], ['wd-am', 'wd-pm', 'we-am']][h % 5];
+  p.avoid = h % 7 === 0 ? ['alcohol'] : h % 11 === 0 ? ['late'] : h % 13 === 0 ? ['water'] : [];
+  p.askCap = 3;
+  p.asksThisWeek = h % 6 === 0 ? 3 : h % 3; // some people have already had their 3 asks this week
   p.points = Math.max(0, events * (GOODWILL_RULES.attended + GOODWILL_RULES.feedbackGiven + 2 * GOODWILL_RULES.goodReview)
     + hosted * GOODWILL_RULES.hosted + (idVerified ? GOODWILL_RULES.idVerified : 0) + noShows * GOODWILL_RULES.noShow);
   return p;

@@ -379,16 +379,24 @@ function planTraits(plan, now = new Date()) {
   return [...t];
 }
 
-// Edges learned from history: who you've played with, who you rated well, what you actually turn up to.
-function socialContext(history, me = 'me') {
+// Edges learned from what people do. Only confirmed attendance counts, the same rule as the profile's numbers.
+//   played:   PLAYED_WITH  person -> count of confirmed plans together
+//   actCount: ATTENDED     activity -> count of confirmed plans
+//   rated:    RATED        person -> 'good' | 'bad' from feedback you gave (private)
+//   blocked:  BLOCKED      people you blocked (hard filter, both ways)
+function socialContext(history, opts = {}) {
+  const me = opts.me || 'me';
   const played = {}, actCount = {};
   for (const g of history) {
-    if (!g.members.includes(me)) continue;
+    if (!g.members.includes(me) || g.confirmed === false) continue;
     actCount[g.act] = (actCount[g.act] || 0) + 1;
     for (const m of g.members) if (m !== me) played[m] = (played[m] || 0) + 1;
   }
-  return { played, actCount };
+  return { played, actCount, rated: opts.rated || {}, blocked: opts.blocked || new Set() };
 }
+
+// A plan is off-limits if someone blocked is organising it or going.
+const touchesBlocked = (plan, ctx) => ctx && ctx.blocked && ctx.blocked.size && [plan.org, ...plan.members].some((m) => ctx.blocked.has(m));
 
 // Score one event for one person and explain it as edges from "you" to the event.
 function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new Date()) {
@@ -409,10 +417,13 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   const levelFit = mine && plan.skill ? [1, 0.8, 0.5, 0.3][Math.abs(SKILLS.indexOf(mine) - SKILLS.indexOf(plan.skill))] : 0.8;
   const bucket = bucketOf(slot.start);
   const freeFit = !profile.free || !profile.free.length ? 0.7 : profile.free.includes(bucket) ? 1 : 0.3;
-  const friends = plan.members.filter((m) => ctx.played[m]);
-  const social = Math.min(1, friends.reduce((k, m) => k + ctx.played[m], 0) / 3);
+  // People you've played with count; a good rating from you counts extra. Someone you rated badly lowers the plan quietly.
+  const rated = ctx.rated || {};
+  const friends = plan.members.filter((m) => ctx.played[m] && rated[m] !== 'bad');
+  const social = Math.min(1, friends.reduce((k, m) => k + ctx.played[m] + (rated[m] === 'good' ? 1 : 0), 0) / 3);
+  const dislike = [plan.org, ...plan.members].some((m) => rated[m] === 'bad') ? 0.15 : 0;
   const goal = goalFit(profile.goals || [], plan, act, venue);
-  const score = 0.28 * interest + 0.11 * soon + 0.08 * momentum + 0.08 * trust + 0.11 * levelFit + 0.12 * freeFit + 0.14 * social + 0.08 * goal.score;
+  const score = 0.28 * interest + 0.11 * soon + 0.08 * momentum + 0.08 * trust + 0.11 * levelFit + 0.12 * freeFit + 0.14 * social + 0.08 * goal.score - dislike;
 
   const BUCKET_LABEL = { 'wd-am': 'weekday mornings', 'wd-pm': 'weekday evenings', 'we-am': 'weekend mornings', 'we-pm': 'weekend afternoons' };
   const edges = [
@@ -463,7 +474,7 @@ function rankFeed(profile, plans, opts = {}) {
   const radius = profile.radius || 10;
   const shown = [], hidden = [];
   for (const plan of plans) {
-    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id))) continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id)) || touchesBlocked(plan, ctx)) continue;
     if (eventPhase(plan, now) === 'done') continue;
     const item = scoreEvent(profile, plan, ctx, now);
     if (item.dist > radius) continue;
@@ -489,7 +500,7 @@ function searchEvents(text, profile, plans, opts = {}) {
   const centre = PLACE[place || profile.suburb] || PLACE[ME.suburb];
   const exact = [], similar = [], hidden = [];
   for (const plan of plans) {
-    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done') continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done' || touchesBlocked(plan, opts.ctx)) continue;
     const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
     if (km(centre, venue || PLACE[plan.place]) > radius) continue;
     const slot = slotOf(plan, now);
@@ -511,11 +522,11 @@ function searchEvents(text, profile, plans, opts = {}) {
 }
 
 // Browse: how many open events per activity and per day for the next week.
-function browseIndex(profile, plans, now = new Date()) {
+function browseIndex(profile, plans, now = new Date(), ctx = null) {
   const byAct = {}, byDay = {};
   const home = PLACE[profile.suburb] || PLACE[ME.suburb];
   for (const plan of plans) {
-    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done') continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done' || touchesBlocked(plan, ctx)) continue;
     const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
     if (km(home, venue || PLACE[plan.place]) > (profile.radius || 10)) continue;
     byAct[plan.act] = (byAct[plan.act] || 0) + 1;
@@ -523,6 +534,40 @@ function browseIndex(profile, plans, now = new Date()) {
     byDay[d] = (byDay[d] || 0) + 1;
   }
   return { byAct, byDay };
+}
+
+// ---------- the other direction: which people a plan reaches ----------
+
+// Walks the same edges from the plan's side. Each person is checked against their own private fields
+// (travel distance, avoid list, free times, level, weekly cap) and the result says why anyone was held back.
+// Organisers only ever see the counts, never who.
+function reachForEvent(plan, opts = {}) {
+  const now = opts.now || new Date();
+  const people = opts.people || PEOPLE;
+  const blocked = opts.blocked || new Set();
+  const slot = slotOf(plan, now);
+  const venue = (typeof VENUE !== 'undefined' && VENUE[plan.venueId]) || PLACE[plan.place];
+  const traits = planTraits(plan, now);
+  const bucket = bucketOf(slot.start);
+  const act = ACT[plan.act];
+  const asked = [], likely = [];
+  const held = { blocked: 0, far: 0, avoid: 0, level: 0, busy: 0, cap: 0 };
+  for (const p of people) {
+    if (plan.members.includes(p.id) || p.id === plan.org) continue;
+    const ask = OPEN_ASKS.find((a) => a.who === p.id && (a.act === plan.act) && resolveWhen(a.when, now).some((s) => s.start < slot.end && s.end > slot.start));
+    const into = p.interests.includes(plan.act);
+    if (!ask && !into) continue; // no edge to this activity at all
+    if (blocked.has(p.id)) { held.blocked++; continue; }
+    if (km(PLACE[p.suburb], venue) > (p.radius || 10)) { held.far++; continue; }
+    if (traits.some((t) => (p.avoid || []).includes(t))) { held.avoid++; continue; }
+    const lvl = p.levels && p.levels[plan.act];
+    if (lvl && plan.skill && Math.abs(SKILLS.indexOf(lvl) - SKILLS.indexOf(plan.skill)) >= 2) { held.level++; continue; }
+    if (ask) { asked.push(p); continue; } // they asked for this: always told, no cap
+    if (p.free && p.free.length && !p.free.includes(bucket)) { held.busy++; continue; }
+    if ((p.asksThisWeek || 0) >= (p.askCap || 3)) { held.cap++; continue; }
+    likely.push(p);
+  }
+  return { asked, likely, held, heldTotal: Object.values(held).reduce((a, b) => a + b, 0), activity: act.label };
 }
 
 // Directions links. Coordinates go to the maps app; nothing about the person is sent.
@@ -562,5 +607,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

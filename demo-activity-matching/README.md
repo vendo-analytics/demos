@@ -29,6 +29,8 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Host tools | A plan you host: accept a join request, edit it (everyone is told what changed), cancel it with a reason, run it again next week. |
 | Plan data | Every field on a plan with its value and allowed values. |
 | Profile data | Every field on your profile with its value and allowed values, editable with validation. |
+| Your graph | Every edge from you to activities, people, places, times, goals and avoids, weighted. Rate someone or block someone, then come back. |
+| Graph data | Every node and edge type with live counts, and how the same edges work in both directions. |
 | Check-in | A plan happening now: "I'm here" or "Running late", then confirmation and +50. |
 | Roll call | The organiser marks who came on a plan they hosted. |
 | Feedback | Rate the plan, confirm who came, tag people. A good review comes back a few seconds later. |
@@ -226,6 +228,7 @@ demo-activity-matching/
 ├── onboarding.js  # Onboarding screen, Claude and voice wiring
 ├── img/           # Demo photos: people/<id>.jpg and acts/<activity>.jpg
 ├── profile.js     # Profile fields, profile screens, Profile data editor
+├── graph.js       # Your graph, Graph data, organiser reach breakdown
 ├── MODEL.md       # Data model and lifecycle spec
 ├── schema.sql     # Postgres schema
 └── README.md

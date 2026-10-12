@@ -11,7 +11,7 @@ function myStatus(g) { return g.org === 'me' ? 'hosting' : S.mem[g.id] || null; 
 const inThread = (g) => IN_THREAD.includes(myStatus(g));
 
 let CTX = null;
-function ctxNow() { return CTX || (CTX = socialContext([...HISTORY, ...PAST_PLANS])); }
+function ctxNow() { return CTX || (CTX = socialContext([...HISTORY, ...PAST_PLANS, ...allEvents().filter((g) => !g.past && g.members.includes('me') && g.confirmed)], { rated: S.ratings, blocked: S.hidden })); }
 
 const msgsOf = (id) => S.chat[id] || (S.chat[id] = []);
 const unread = (id) => Math.max(0, msgsOf(id).length - (S.read[id] || 0));
@@ -80,6 +80,7 @@ function actionHTML(g, st, phase) {
         : `<div class="notice info"><b>Attendance taken</b>${plural(g.members.length, 'person')} came. Thanks for organising.</div><button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>`;
     }
     return `${requestsHTML(g)}${phase === 'live' ? `<button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button>` : `<div class="btn-pair"><button type="button" class="btn ghost" data-act="edit-plan" data-v="${id}">Edit plan</button><button type="button" class="btn ghost" data-act="cancel-plan" data-v="${id}">Cancel plan</button></div>`}
+      ${reachHTML(g)}
       ${g.sent != null ? `<div class="card"><p class="eyebrow">Your plan so far</p>${funnelHTML(g)}<p class="small muted" style="margin:0">Sent to ${plural(g.sent, 'person')} who fit, and showing in Explore within ${ME.radius || 10} km. Everyone gets a reminder 2 hours before.</p></div>` : ''}`;
   }
   if (phase === 'done') {
@@ -466,6 +467,7 @@ Object.assign(ACTIONS, {
       S.mem[v] = 'attended';
       g.confirmedBy = g.org;
       g.confirmed = true;
+      CTX = null;
       addPoints(50, `Attended ${g.title}, confirmed by ${PERSON[g.org].name}`);
       postSys(v, `${PERSON[g.org].name} confirmed ${ME.name} is here`);
       updateBadge();

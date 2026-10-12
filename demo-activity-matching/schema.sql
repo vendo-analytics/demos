@@ -106,7 +106,7 @@ create table events (
   status               event_status not null default 'open',
   traits               text[] not null default '{}',  -- derived on write: activity traits + licensed venue + late/early/big
   time_bucket          text not null,                 -- derived: wd-am | wd-pm | we-am | we-pm
-  created_from_ask_id  uuid,
+  created_from_ask_id  uuid,                         -- references asks(id); asks is defined below
   cloned_from_event_id uuid references events(id),
   cancelled_reason     text,
   created_at           timestamptz not null default now()
@@ -131,6 +131,38 @@ create table event_members (
   primary key (event_id, user_id)
 );
 create index on event_members (user_id, status);
+
+-- ---------- asks and notifications ----------
+
+create table asks (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references users(id),
+  raw_text   text not null check (length(raw_text) <= 300),
+  activity_id text not null references activities(id),
+  suburb_id  text references suburbs(id),            -- null for online
+  radius_km  int not null default 5,
+  slots      tstzmultirange not null,                -- one range per day in the asked window
+  have       int not null default 1 check (have between 1 and 8),
+  seek       int not null default 1 check (seek between 1 and 20),
+  level      skill_level,
+  role       text check (role in ('learner', 'teacher')),
+  status     text not null default 'open' check (status in ('open', 'matched', 'closed', 'expired')),
+  expires_at timestamptz not null default now() + interval '7 days',
+  created_at timestamptz not null default now()
+);
+create index on asks (activity_id) where status = 'open';
+
+-- Every "might be keen" ask, plan invite and reach-out sent, so the weekly cap can be enforced.
+create table notifications (
+  id         bigserial primary key,
+  user_id    uuid not null references users(id),
+  kind       text not null check (kind in ('ask', 'plan', 'invite', 'thread', 'reminder', 'feedback')),
+  event_id   uuid references events(id),
+  ask_id     uuid references asks(id),
+  created_at timestamptz not null default now(),
+  read_at    timestamptz
+);
+create index on notifications (user_id, kind, created_at);
 
 -- ---------- threads ----------
 
@@ -236,3 +268,25 @@ create unique index on attended_activity (user_id, activity_id);
 -- select e.*, m.attendance, r.stars from event_members m join events e on e.id = m.event_id
 -- left join event_ratings r on r.event_id = e.id and r.user_id = m.user_id
 -- where m.user_id = :me and (m.attendance = 'attended' or e.organiser_id = :me) order by e.starts_at desc;
+
+-- Reach: who a posted plan :event reaches (MODEL.md §3.4). The same edges as recommendations, from the plan's side.
+-- with e as (select e.*, v.location, v.licensed from events e join venues v on v.id = e.venue_id where e.id = :event)
+-- select u.id,
+--        case when exists (select 1 from blocks b where (b.blocker_id = u.id and b.blocked_id = e.organiser_id)
+--                                              or (b.blocker_id = e.organiser_id and b.blocked_id = u.id)) then 'blocked'
+--             when not st_dwithin(e.location, s.centroid, u.travel_radius_km * 1000)                  then 'far'
+--             when e.traits && u.avoid                                                             then 'avoid'
+--             when abs(array_position(enum_range(null::skill_level), ui.level)
+--                    - array_position(enum_range(null::skill_level), e.level)) >= 2                  then 'level'
+--             when a.id is not null                                                                then 'asked'   -- told now
+--             when not (e.time_bucket = any (u.availability))                                       then 'busy'
+--             when (select count(*) from notifications n where n.user_id = u.id and n.kind = 'ask'
+--                    and n.created_at > now() - interval '7 days') >= u.asks_per_week                then 'cap'
+--             else 'likely' end as outcome                                                              -- told within cap
+-- from e
+-- join users u on u.id <> e.organiser_id
+-- join suburbs s on s.id = u.home_suburb_id
+-- left join user_interests ui on ui.user_id = u.id and ui.activity_id = e.activity_id
+-- left join asks a on a.user_id = u.id and a.activity_id = e.activity_id and a.slots && tstzrange(e.starts_at, e.ends_at)
+-- where (ui.user_id is not null or a.id is not null)
+--   and not exists (select 1 from event_members m where m.event_id = e.id and m.user_id = u.id);
