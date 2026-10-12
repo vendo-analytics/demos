@@ -685,7 +685,8 @@ const NOTES = {
   history: {
     title: 'History',
     body: `<ul>
-      <li>Every plan you went to or hosted, newest first, with the rating you gave and anything still due.</li>
+      <li>Every plan you went to or hosted, by month, with the rating you gave. Plans not confirmed yet say "Not counted yet" with the button that fixes it (Rate, Take attendance).</li>
+      <li>Activity chips filter the list. People you've played with link to their profile, where you can invite them to one of your plans.</li>
       <li>History builds the graph: activities you actually turn up to rank higher than ones you only list, and people you've played with show up in "who's going".</li>
       <li>Other people see only your counts per activity, never where or when. A full history would show someone's routine.</li>
     </ul>`,

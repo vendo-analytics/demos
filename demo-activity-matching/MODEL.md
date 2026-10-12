@@ -596,9 +596,13 @@ they receive a good review (+10 Goodwill, max 3 per event). They're never told w
 
 ## 11. History
 
-- **Your own profile:** every event you attended or hosted, newest first, with date, activity, role (went or hosted),
-  the rating you gave, and anything still due (rate, take attendance). Plus totals by activity and the people you've
-  played with most.
+- **Your own profile:** every event you attended or hosted, grouped by month, newest first, with date, activity, role
+  (went or hosted), and the rating you gave.
+  - A plan that isn't confirmed yet says **Not counted yet**, with the action that would count it (Rate, or Take
+    attendance for your own plans) as a button on the row. The totals at the top count confirmed plans only.
+  - Activity chips filter the list ("Padel 3"). People you've played with (confirmed plans only) link to their profile,
+    where you can invite them to one of your plans.
+  - Plans you left or that were cancelled aren't history; they stay on the Plans tab until they'd have finished.
 - **Other people's profiles:** only counts per activity ("Padel 24 · Surfing 14"), total events, no-shows, and "played
   with you 3×" if you have. Never where or when, because a full history would reveal someone's routine.
 

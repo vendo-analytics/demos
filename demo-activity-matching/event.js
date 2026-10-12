@@ -413,11 +413,14 @@ function historyItems() {
 function historyRowHTML(g) {
   const hosted = g.org === 'me';
   const due = (g.id === 'past1' && !S.feedbackDone) || g.needsRollcall;
-  const right = due ? `<span class="status due">${g.needsRollcall ? 'Take attendance' : 'Rate'}</span>` : g.rated ? `<span class="stars-sm" aria-label="You rated it ${g.rated} stars">${'★'.repeat(g.rated)}</span>` : '';
+  const right = !due && g.rated ? `<span class="stars-sm" aria-label="You rated it ${g.rated} stars">${'★'.repeat(g.rated)}</span>` : '';
+  const action = due ? `<button type="button" class="status due" data-act="${g.needsRollcall ? 'rollcall' : 'feedback'}" data-v="${g.id}">${g.needsRollcall ? 'Take attendance' : 'Rate · +20'}</button>` : '';
+  const counted = g.confirmed !== false;
   return `<div class="hist-row" data-act="plan" data-v="${g.id}">
     <div class="thumb">${actArt(g.act)}</div>
     <div class="hist-date num"><b>${slotOf(g, NOW).start.getDate()}</b><span>${MONTHS_SHORT[slotOf(g, NOW).start.getMonth()]}</span></div>
-    <div style="flex:1;min-width:0"><div class="name ellipsis">${esc(g.title)}</div><div class="small muted ellipsis">${esc(ACT[g.act].label)} · ${hosted ? 'Hosted' : 'Went'} · ${plural(g.members.length - 1, 'other')}</div></div>
+    <div style="flex:1;min-width:0"><div class="name ellipsis">${esc(g.title)}</div><div class="small muted ellipsis">${esc(ACT[g.act].label)} · ${hosted ? 'Hosted' : 'Went'} · ${plural(g.members.length - 1, 'other')}</div>
+      ${counted ? '' : `<div class="hist-due"><span class="small not-counted">Not counted yet</span>${action}</div>`}</div>
     ${right}
   </div>`;
 }
@@ -432,14 +435,26 @@ function historyStats() {
 }
 
 VIEWS.history = () => {
-  const { items, byAct, hosted } = historyStats();
-  const played = Object.entries(ctxNow().played).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const { items, byAct } = historyStats();
+  const f = S.histAct;
+  const shown = f ? items.filter((g) => g.act === f) : items;
+  const played = Object.entries(ctxNow().played).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const uncounted = items.filter((g) => g.confirmed === false).length;
+  // group by month, newest first
+  const months = [];
+  for (const g of shown) {
+    const d = slotOf(g, NOW).start, key = `${d.getFullYear()}-${d.getMonth()}`;
+    let m = months.find((x) => x.key === key);
+    if (!m) months.push((m = { key, label: d.toLocaleDateString('en-AU', { month: 'long', year: d.getFullYear() === NOW.getFullYear() ? undefined : 'numeric' }), items: [] }));
+    m.items.push(g);
+  }
   return bar('History') + `<div class="pad">
     <div class="kpis"><div><b>${myStats().events}</b><span>confirmed</span></div><div><b>${myStats().hosted}</b><span>hosted</span></div><div><b>${ME.noShows}</b><span>no-shows</span></div></div>
-    <div><h3 class="h3">By activity</h3><div class="chips" style="margin-top:6px">${byAct.map(([a, n]) => `<span class="chip">${esc(ACT[a].label)} <span class="num muted">${n}</span></span>`).join('')}</div></div>
-    <div><h3 class="h3">People you've played with</h3><div class="chips" style="margin-top:6px">${played.map(([pid, n]) => `<button type="button" class="chip" data-act="person" data-v="${pid}">${esc(PERSON[pid].name)} <span class="num muted">${n}×</span></button>`).join('')}</div></div>
-    <div class="card" style="gap:0">${items.map(historyRowHTML).join('')}</div>
-    <p class="small muted" style="margin:0">Plans count once someone who was there confirms you came, so ${items.length - myStats().events} of these ${items.length} aren't counted yet. Others see only how many times you've done each activity, never where or when.</p>
+    <div><h3 class="h3">By activity</h3><div class="chips" style="margin-top:6px"><button type="button" class="chip" data-act="hist-act" data-v="" aria-pressed="${!f}">All <span class="num muted">${items.length}</span></button>${byAct.map(([a, n]) => `<button type="button" class="chip" data-act="hist-act" data-v="${a}" aria-pressed="${f === a}">${esc(ACT[a].label)} <span class="num muted">${n}</span></button>`).join('')}</div></div>
+    <div><h3 class="h3">People you've played with</h3><div class="chips" style="margin-top:6px">${played.map(([pid, n]) => `<button type="button" class="chip person-chip" data-act="person" data-v="${pid}">${avatar(PERSON[pid], 's')}${esc(PERSON[pid].name)} <span class="num muted">${n}×</span></button>`).join('')}</div>
+      <p class="small muted" style="margin:6px 0 0">Only people from confirmed plans. Tap someone to invite them to one of yours.</p></div>
+    ${months.map((m) => `<div class="section-h"><h3 class="h3">${esc(m.label)}</h3><span class="small muted">${plural(m.items.length, 'plan')}</span></div><div class="card" style="gap:0">${m.items.map(historyRowHTML).join('')}</div>`).join('')}
+    <p class="small muted" style="margin:0">Plans count once someone who was there confirms you came${uncounted ? `, so ${uncounted} of these ${items.length} aren't counted yet` : ''}. Others see only how many times you've done each activity, never where or when.</p>
   </div>`;
 };
 
@@ -452,7 +467,8 @@ Object.assign(ACTIONS, {
   'thread-details': (v) => { const prev = S.stack[S.stack.length - 2]; if (prev && prev.name === 'plan' && prev.v === v) back(); else go('plan', v); },
   reply: (v) => { const [id, i] = v.split(':'); S.replyTo = { id, i: +i }; render(true); $('#threadInput')?.focus(); },
   'reply-cancel': () => { S.replyTo = null; render(true); },
-  history: () => go('history'),
+  history: () => { S.histAct = null; go('history'); },
+  'hist-act': (v) => { S.histAct = v || null; render(true); },
   interest: (v) => {
     const g = findPlan(v);
     S.mem[v] = 'interested';

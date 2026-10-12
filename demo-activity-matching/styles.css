@@ -828,3 +828,9 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .done-tick { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #34C759, #30B0C7); box-shadow: 0 10px 24px rgb(52 199 89 / 0.35); }
 .chip.got { background: var(--good-soft); color: var(--good); border-color: transparent; }
 .fb-row .notice { margin-top: 4px; }
+.not-counted { color: var(--warn, #C77C02); font-weight: 600; margin-top: 2px; }
+button.status { border: 0; cursor: pointer; font: inherit; }
+.person-chip { display: inline-flex; align-items: center; gap: 6px; padding-left: 4px; }
+.person-chip .av { width: 22px; height: 22px; font-size: 10px; }
+.hist-due { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.hist-due .not-counted { margin: 0; }
