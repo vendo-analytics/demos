@@ -56,10 +56,25 @@ function setTab(tab) { S.tab = tab; S.stack = []; render(); }
 // ---------- shared bits ----------
 
 const ICON_BACK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
-const bar = (title, withBack = true, extra = '') =>
-  `<div class="bar">${withBack ? `<button class="icon-btn" data-act="back" aria-label="Back">${ICON_BACK}</button>` : ''}<h2>${title}</h2>${extra}</div>`;
+// Navigation bar. Tab roots get an iOS-style large title that hands over to the bar on scroll;
+// `over` makes the bar float transparently over a full-bleed image until you scroll.
+const bar = (title, withBack = true, extra = '', opts = {}) =>
+  `<div class="bar${withBack ? '' : ' root'}${opts.over ? ' over' : ''}">${withBack ? `<button class="icon-btn" data-act="back" aria-label="Back">${ICON_BACK}</button>` : ''}<h2>${title}</h2>${extra}</div>${withBack || opts.noLarge ? '' : `<h1 class="large-title">${title}</h1>`}`;
 
-const avatar = (p, size = 'm') => `<span class="av ${size}" style="--h:${p.hue}" aria-hidden="true">${esc(p.name[0])}</span>`;
+// Photos sit over the initials; if a photo is missing or fails to load it's removed and the initials show.
+const avatar = (p, size = 'm') => `<span class="av ${size}" style="--h:${p.hue}" aria-hidden="true">${esc(p.name[0])}${p.photo ? `<img src="img/people/${p.id}.jpg" alt="" loading="lazy" data-fallback>` : ''}</span>`;
+
+// Activity imagery: a photo at img/acts/<id>.jpg, over a gradient in the activity category's colours.
+const ART = {
+  racquet: ['#00A86B', '#7BD389'], team: ['#1E5BFF', '#4FC3F7'], fitness: ['#FF6B35', '#FF3D7F'], water: ['#0077B6', '#48CAE4'],
+  outdoors: ['#2D8A4E', '#A7D676'], local: ['#7B5CFF', '#FF7AC6'], games: ['#6A3DE8', '#B388FF'], language: ['#E63946', '#F4A261'],
+  music: ['#D6336C', '#845EF7'], creative: ['#F08C00', '#FF6B6B'], service: ['#5C6773', '#A3ACB9'],
+};
+function actArt(actId) {
+  const a = ACT[actId];
+  const [g1, g2] = ART[a.cat] || ART.service;
+  return `<div class="art" style="--g1:${g1};--g2:${g2}"><span class="art-word" aria-hidden="true">${esc(a.label)}</span><img src="img/acts/${actId}.jpg" alt="" loading="lazy" data-fallback></div>`;
+}
 const gw = (pts) => { const l = levelFor(pts); return `<span class="gw ${l.key}" title="${l.name}">${fmtPts(pts)}</span>`; };
 const personPts = (p) => (p.id === 'me' ? S.points : p.points);
 
@@ -167,7 +182,7 @@ function updatePreview() {
 const VIEWS = {};
 
 VIEWS.ask = () => `
-  ${bar('Keen', false, `<span class="muted small">Near ${ME.suburb}</span>`)}
+  ${bar('Keen', false, `<span class="muted small">Near ${ME.suburb}</span>`, { noLarge: true })}
   <div class="pad">
     <div><p class="eyebrow">Hi ${ME.name}</p><h1 class="h1">What do you want to do?</h1></div>
     <div class="ask-box">
@@ -542,7 +557,7 @@ function render(keepScroll = false) {
   const v = view();
   scr.innerHTML = VIEWS[v.name](v);
   scr.scrollTo({ top: keepScroll ? y : v.name === 'thread' ? scr.scrollHeight : 0, behavior: 'instant' });
-  $('#phone').classList.toggle('no-tabs', v.name === 'onboard');
+  $('#phone').classList.toggle('no-tabs', ['onboard', 'thread'].includes(v.name));
   if (v.name === 'onboard') obAfterRender();
   document.querySelectorAll('#tabs button').forEach((b) => {
     if (b.dataset.v === S.tab) b.setAttribute('aria-current', 'page');
@@ -664,9 +679,9 @@ const NOTES = {
   person: {
     title: 'Enough to decide, nothing to stalk',
     body: `<ul>
-      <li>Every profile uses the same card as yours: first name, photo, suburb, member since, verification, Goodwill, plans attended, hosted and no-shows, activities with levels and counts, goals, and positive tag counts.</li>
+      <li>Every profile uses the same layout as yours: a big photo (or initials on a gradient) with name, suburb and Goodwill over it, then verification, about, plans attended, hosted and no-shows, activities with levels and counts, and positive tag counts.</li>
       <li>People are never rated with stars. Stars belong to plans, so the only star figure on a profile is the hosting rating, shown once someone has hosted 3 plans.</li>
-      <li>Never shown: surname, phone, email, address, exact location, age, avoid list, free times, and negative feedback.</li>
+      <li>Never shown: surname, phone, email, address, exact location, age, goals, avoid list, free times, and negative feedback.</li>
       <li>Distance is measured between suburb centres and rounded, so nobody can work out where someone lives.</li>
       <li>"Invite" only appears when there's something to invite them to: your ask (coming from matches) or a plan you're hosting.</li>
     </ul>`,
@@ -675,8 +690,8 @@ const NOTES = {
     title: 'Profile fields',
     body: `<ul>
       <li>This screen is the data dictionary in working form: every field on a profile, its database name, whether it's required, the allowed values, who sets it, and the current value.</li>
-      <li><b>Shown on your profile</b> (6 fields): first name, photo, home suburb, about you, activities with levels, goals.</li>
-      <li><b>Only you and Keen</b> (6): age, mobile number, travel distance, things to avoid, free times, asks per week.</li>
+      <li><b>Shown on your profile</b> (5 fields): first name, photo, home suburb, about you, activities with levels. Photo is optional; without one, initials show on a colour gradient.</li>
+      <li><b>Only you and Keen</b> (7): what you want from Keen (goals), age, mobile number, travel distance, things to avoid, free times, asks per week. Goals only tune recommendations ("Good for getting fitter").</li>
       <li><b>Worked out by Keen</b> (10): member since, verification, Goodwill and its level, plans attended and hosted, hosting rating, no-shows, positive tags, plans per activity. None of these can be typed in.</li>
       <li>Levels use one vocabulary everywhere: Beginner, Casual, Intermediate, Competitive. The onboarding chat accepts plain words ("pretty decent", "7 out of 10") and maps them to these.</li>
       <li>MODEL.md §1 has the same list with types and validation.</li>
@@ -809,7 +824,7 @@ function init() {
   });
   $('#screen').addEventListener('scroll', (e) => {
     const b = e.target.querySelector('.bar');
-    if (b) b.classList.toggle('scrolled', e.target.scrollTop > 4);
+    if (b) b.classList.toggle('scrolled', e.target.scrollTop > (b.classList.contains('over') ? 240 : b.classList.contains('root') ? 40 : 4));
   });
   $('#notes').addEventListener('click', (e) => {
     const b = e.target.closest('[data-flow]');
@@ -825,6 +840,8 @@ function init() {
     msgs.forEach((m) => { m.at = new Date(+NOW - (m.ago || 0) * 60e3); });
     S.read[id] = msgs.length - (id === 'live1' ? 1 : 0);
   }
+  // Missing photos fall back to initials or gradient art (error events don't bubble, so listen in the capture phase).
+  document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.hasAttribute('data-fallback')) t.remove(); }, true);
   S.ledger = seedLedger();
   S.points = S.ledger.reduce((k, l) => k + l.pts, 0);
   S.ob = freshOnboarding();

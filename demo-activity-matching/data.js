@@ -171,13 +171,17 @@ const FRIEND_ROWS = [
   ['f3', 'Tim', 'Balgowlah', 120, 'Jun 2026', false, 'football:intermediate', 'fitness', 'Goalkeeper by default.', 6, 0, null, 0],
 ];
 
+// People who haven't added a photo yet. Their initials are shown instead.
+const NO_PHOTO = ['p25', 'p28', 'f3'];
+
 const hashOf = (str) => { let h = 0; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 
 // Turn a row into a profile and derive everything that follows from it.
 function personFromRow([id, name, suburb, hue, joined, idVerified, interests, goals, bio, events, hosted, hostRating, noShows]) {
   const list = interests.split(' ').map((x) => x.split(':'));
   const p = {
-    id, name, suburb, hue, joined, bio, idVerified, phoneVerified: true, photoVerified: true,
+    id, name, suburb, hue, joined, bio, idVerified, phoneVerified: true,
+    photo: !NO_PHOTO.includes(id), // photos live at img/people/<id>.jpg; people without one show initials
     interests: list.map(([a]) => a), levels: Object.fromEntries(list), goals: goals.split(' '),
     events, hosted, hostRating: hosted >= 3 ? hostRating : null, noShows,
   };
@@ -205,7 +209,7 @@ const FRIENDS = FRIEND_ROWS.map(personFromRow);
 const ME = {
   id: 'me', name: 'Sam', suburb: 'Manly', hue: 196, joined: 'Feb 2026',
   bio: 'Padel most weekends, learning to surf.',
-  phone: '+61412345678', phoneVerified: true, photoVerified: true, idVerified: false,
+  phone: '+61412345678', phoneVerified: true, photo: true, idVerified: false,
   interests: ['padel', 'surfing', 'running', 'boardgames', 'language'],
   levels: { padel: 'casual', surfing: 'beginner', running: 'intermediate', boardgames: 'casual', language: 'beginner' },
   goals: ['friends', 'fitness'],

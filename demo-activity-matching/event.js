@@ -37,13 +37,17 @@ VIEWS.plan = ({ v: id }) => {
   const phase = g.past ? 'done' : eventPhase(g, NOW);
   const st = myStatus(g);
   const left = g.size - g.members.length;
-  const pill = phase === 'done' ? ['Finished', 'ok'] : phase === 'live' ? ['Happening now', 'due'] : left <= 0 ? ['Full', 'wait'] : ['Open', 'ok'];
-  return bar(esc(g.title)) + `<div class="pad">
-    <div>
-      <div class="row"><p class="eyebrow grow">${esc(ACT[g.act].label)}</p><span class="status ${pill[1]}">${pill[0]}</span>${st && st !== 'hosting' ? `<span class="status wait">${STATUS_LABEL[st]}</span>` : ''}</div>
-      <h1 class="h1">${esc(g.title)}</h1>
-      <div class="row small" style="margin-top:6px">${avatar(org, 's')}<span>${g.org === 'me' ? 'Organised by you' : `Organised by <b>${esc(org.name)}</b>`}</span>${g.org !== 'me' ? gw(org.points) : ''}</div>
+  const pill = phase === 'done' ? 'Finished' : phase === 'live' ? 'Happening now' : left <= 0 ? 'Full' : `${left} spot${left === 1 ? '' : 's'} left`;
+  return bar(esc(g.title), true, '', { over: true }) + `
+  <div class="hero-media">${actArt(g.act)}<div class="hero-shade"></div>
+    <div class="hero-text">
+      <div class="row" style="flex-wrap:wrap"><span class="pill-glass">${esc(ACT[g.act].label)}</span><span class="pill-glass${phase === 'live' ? ' hot' : ''}">${pill}</span>${st && st !== 'hosting' ? `<span class="pill-glass">${STATUS_LABEL[st]}</span>` : ''}</div>
+      <h1>${esc(g.title)}</h1>
+      <p>${esc(fmtSlot(slot, NOW))} · ${esc(g.venue)}</p>
     </div>
+  </div>
+  <div class="pad sheet-up">
+    <div class="row small">${avatar(org, 's')}<span class="grow">${g.org === 'me' ? 'Organised by you' : `Organised by <b>${esc(org.name)}</b>`}</span>${g.org !== 'me' ? gw(org.points) : ''}</div>
     ${actionHTML(g, st, phase)}
     <div class="meta">
       <div><span class="k">When</span><span>${esc(fmtSlot(slot, NOW))}</span></div>
@@ -290,8 +294,8 @@ function threadsList() {
 
 function eventRow(g, statusText, statusClass = 'wait') {
   return `<article class="card tap" data-act="plan" data-v="${g.id}">
-    <div class="row"><div class="grow" style="min-width:0"><div class="name">${esc(g.title)}</div><div class="muted small">${esc(fmtSlot(slotOf(g, NOW), NOW))} · ${esc(g.venue)}</div></div><span class="status ${statusClass}">${statusText}</span></div>
-    <div class="row">${spots(g.members.length, g.size)}${unread(g.id) && inThread(g) ? `<span class="count-badge">${unread(g.id)} new</span>` : ''}</div>
+    <div class="event-row"><div class="thumb">${actArt(g.act)}</div><div class="grow" style="min-width:0"><div class="name ellipsis">${esc(g.title)}</div><div class="muted small ellipsis">${esc(fmtSlot(slotOf(g, NOW), NOW))} · ${esc(g.venue)}</div>
+      <div class="row" style="margin-top:6px"><span class="status ${statusClass}">${statusText}</span>${unread(g.id) && inThread(g) ? `<span class="count-badge">${unread(g.id)} new</span>` : ''}</div></div></div>
   </article>`;
 }
 
@@ -304,7 +308,7 @@ VIEWS.activity = () => {
   let h = bar('Plans', false, `<button type="button" class="btn sm" data-act="create">Create</button>`) + '<div class="pad">';
   if (needs.length) {
     h += `<div class="section-h"><h3 class="h3">Needs you</h3><span class="small muted num">${needs.length}</span></div>`;
-    h += needs.map((n) => `<article class="card tap needs" data-act="${n.act}" data-v="${n.g.id}"><div class="row"><div class="grow" style="min-width:0"><p class="eyebrow">${esc(n.label)}</p><div class="h3">${esc(n.g.title)}</div><div class="small muted">${esc(n.sub)}</div></div><span class="btn sm">${esc(n.cta)}</span></div></article>`).join('');
+    h += needs.map((n) => `<article class="card tap needs" data-act="${n.act}" data-v="${n.g.id}"><div class="event-row"><div class="thumb">${actArt(n.g.act)}</div><div class="grow" style="min-width:0"><p class="eyebrow" style="color:var(--flag)">${esc(n.label)}</p><div class="h3 ellipsis">${esc(n.g.title)}</div><div class="small muted">${esc(n.sub)}</div></div><span class="btn sm">${esc(n.cta)}</span></div></article>`).join('');
   }
   h += `<div class="section-h"><h3 class="h3">Going</h3><span class="small muted num">${going.length}</span></div>`;
   h += going.length ? going.map((g) => eventRow(g, STATUS_LABEL[myStatus(g)], ['going', 'attended', 'hosting'].includes(myStatus(g)) ? 'ok' : 'wait')).join('') : '<p class="small muted">Nothing booked. Find something in Explore.</p>';
@@ -334,6 +338,7 @@ function historyRowHTML(g) {
   const due = (g.id === 'past1' && !S.feedbackDone) || g.needsRollcall;
   const right = due ? `<span class="status due">${g.needsRollcall ? 'Take attendance' : 'Rate'}</span>` : g.rated ? `<span class="stars-sm" aria-label="You rated it ${g.rated} stars">${'★'.repeat(g.rated)}</span>` : '';
   return `<div class="hist-row" data-act="plan" data-v="${g.id}">
+    <div class="thumb">${actArt(g.act)}</div>
     <div class="hist-date num"><b>${slotOf(g, NOW).start.getDate()}</b><span>${MONTHS_SHORT[slotOf(g, NOW).start.getMonth()]}</span></div>
     <div style="flex:1;min-width:0"><div class="name ellipsis">${esc(g.title)}</div><div class="small muted ellipsis">${esc(ACT[g.act].label)} · ${hosted ? 'Hosted' : 'Went'} · ${plural(g.members.length - 1, 'other')}</div></div>
     ${right}

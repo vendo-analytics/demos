@@ -10,11 +10,12 @@ const labelIn = (list, id) => (list.find((x) => String(x.id) === String(id)) || 
 // calculated (worked out by Keen). This list drives the Profile data screen and matches MODEL.md §1.
 const PROFILE_FIELDS = [
   { key: 'name', field: 'first_name', label: 'First name', group: 'public', type: 'text', max: 30, required: true, source: 'Onboarding chat', rule: '1–30 letters. First name only, never a surname.' },
-  { key: 'photo', field: 'photo', label: 'Photo', group: 'public', type: 'photo', required: true, source: 'Sign-up', rule: 'A clear photo of your face, checked against a selfie before you can join plans.' },
+  { key: 'photo', field: 'photo', label: 'Photo', group: 'public', type: 'photo', source: 'You', rule: 'Optional but encouraged: a clear photo of your face, checked against a selfie. Without one, your initials show instead and organisers see "No photo yet".' },
   { key: 'suburb', field: 'home_suburb', label: 'Home suburb', group: 'public', type: 'one', required: true, source: 'Onboarding chat', options: () => PLACES.map((p) => ({ id: p.name, label: p.name })), rule: 'From the suburb list. Others see the suburb and a rounded distance, never an address.' },
   { key: 'bio', field: 'bio', label: 'About you', group: 'public', type: 'text', max: 160, source: 'You', rule: 'Up to 160 characters. Screened like chat: no contact details or payment talk.' },
   { key: 'interests', field: 'interests', label: 'Activities and levels', group: 'public', type: 'interests', required: true, source: 'Onboarding chat', rule: '1 to 10 activities from the tag list, each with a level.' },
-  { key: 'goals', field: 'goals', label: 'Here to', group: 'public', type: 'many', max: 3, source: 'Onboarding chat', options: () => GOALS, rule: 'Up to 3.' },
+
+  { key: 'goals', field: 'goals', label: 'What you want from Keen', group: 'private', type: 'many', max: 3, source: 'Onboarding chat', options: () => GOALS, rule: 'Up to 3. Used to tune recommendations. Never shown.' },
   { key: 'age', field: 'birth_year', label: 'Age', group: 'private', type: 'number', required: true, source: 'Onboarding chat', rule: '18 or over. Stored as a birth year. Used for the 18+ check and optional age-range matching. Never shown.' },
   { key: 'phone', field: 'phone', label: 'Mobile number', group: 'private', type: 'readonly', required: true, source: 'Sign-up', rule: 'Australian mobile, verified by SMS. One account per number. Never shown.' },
   { key: 'radius', field: 'travel_radius_km', label: "How far you'll travel", group: 'private', type: 'one', source: 'Onboarding chat', options: () => [2, 5, 10, 20, 50].map((n) => ({ id: n, label: `${n} km` })), rule: 'Plans and people further than this are left out. Default 10 km.' },
@@ -22,7 +23,7 @@ const PROFILE_FIELDS = [
   { key: 'free', field: 'availability', label: 'Usually free', group: 'private', type: 'many', source: 'Onboarding chat', options: () => AVAILABILITY, rule: 'Used to rank plans by time. Never shown.' },
   { key: 'askCap', field: 'asks_per_week', label: 'Asks from Keen per week', group: 'private', type: 'one', source: 'You', options: () => [0, 1, 3, 5, 7].map((n) => ({ id: n, label: String(n) })), rule: 'How many "might be keen" asks you can receive in a week. Default 3.' },
   { key: 'joined', field: 'member_since', label: 'Member since', group: 'calculated', source: 'Sign-up date', rule: 'Shown as month and year.' },
-  { key: 'verification', field: 'verification', label: 'Verification', group: 'calculated', source: 'Checks', rule: 'Phone and photo are required. ID is optional and adds 100 Goodwill.' },
+  { key: 'verification', field: 'verification', label: 'Verification', group: 'calculated', source: 'Checks', rule: 'Phone is required. Photo and ID checks are optional; an ID check adds 100 Goodwill.' },
   { key: 'points', field: 'goodwill', label: 'Goodwill', group: 'calculated', source: 'Confirmed activity', rule: '+50 attended, +20 feedback given, +10 per good review (max 3 a plan), +100 hosted with 3 or more people, +100 ID check, −150 no-show, −50 for 3 late cancels in 30 days. Never below 0.' },
   { key: 'level', field: 'goodwill_level', label: 'Goodwill level', group: 'calculated', source: 'Goodwill', rule: 'New 0–199 · Regular 200–999 · Trusted 1,000–2,999 · Local legend 3,000+.' },
   { key: 'events', field: 'events_attended', label: 'Plans attended', group: 'calculated', source: 'Confirmed attendance', rule: 'Counted once someone who was there confirms it.' },
@@ -82,23 +83,33 @@ function tagBarsHTML(tags, reviews) {
     <p class="small muted" style="margin:0">From ${plural(reviews, 'positive review')}. Negative feedback is never shown.</p>`;
 }
 
-function profileCardHTML(p, opts = {}) {
+// The top of a profile: a big photo (or initials on a gradient) with the name over it.
+function posterHTML(p, opts = {}) {
   const self = p.id === 'me';
   const lvl = levelFor(p.points);
   const d = self ? 0 : km(PLACE[p.suburb], PLACE[ME.suburb]);
   const together = self ? 0 : ctxNow().played[p.id] || 0;
-  return `<div class="hero">${avatar(p, 'l')}<h1 class="h1">${esc(p.name)}</h1>
-      <div class="muted small">${esc(p.suburb)}${d >= 1 ? ` · about ${Math.round(d)} km away` : ''} · member since ${esc(p.joined)}</div>
-      <div class="row" style="justify-content:center">${gw(p.points)}<span class="small"><b>${lvl.name}</b></span>${together ? `<span class="status ok">Played with you ${together}×</span>` : ''}</div>
-      <div class="badges"><span class="badge">Phone verified</span><span class="badge">Photo verified</span>${p.idVerified ? '<span class="badge">ID verified</span>' : '<span class="badge off">ID not verified</span>'}</div>
+  return `<div class="poster${opts.card ? ' card-like' : ''}" style="--h:${p.hue}">
+    <span class="poster-i" aria-hidden="true">${esc(p.name[0])}</span>
+    ${p.photo ? `<img src="img/people/${p.id}.jpg" alt="${esc(p.name)}" data-fallback>` : ''}
+    <div class="poster-shade"></div>
+    <div class="poster-text">
+      <h1>${esc(p.name)}</h1>
+      <p>${esc(p.suburb)}${d >= 1 ? ` · about ${Math.round(d)} km away` : ''} · member since ${esc(p.joined)}</p>
+      <div class="row" style="flex-wrap:wrap">${gw(p.points)}<span class="small"><b>${lvl.name}</b></span>${together ? `<span class="status ok">Played with you ${together}×</span>` : ''}</div>
     </div>
-    ${p.bio ? `<p class="quote" style="text-align:center;margin:0">${esc(p.bio)}</p>` : ''}
+  </div>`;
+}
+
+// Everything under the poster. The same for your own profile and anyone else's.
+function profileBodyHTML(p) {
+  return `<div class="badges" style="justify-content:flex-start"><span class="badge">Phone verified</span>${p.photo ? '<span class="badge">Photo verified</span>' : '<span class="badge off">No photo yet</span>'}${p.idVerified ? '<span class="badge">ID verified</span>' : '<span class="badge off">ID not verified</span>'}</div>
+    ${p.bio ? `<p class="quote" style="margin:0;font-size:16px">${esc(p.bio)}</p>` : ''}
     <div class="kpis"><div><b>${p.events}</b><span>plans attended</span></div><div><b>${p.hosted}</b><span>hosted</span></div><div><b>${p.noShows}</b><span>no-shows</span></div></div>
     ${p.hostRating ? `<p class="small" style="margin:0;text-align:center">Hosting rating <b>★ ${p.hostRating}</b> across ${plural(p.hosted, 'hosted plan')}</p>` : ''}
     <div class="card"><div class="h3">Activities</div>
-      <div class="act-list">${p.interests.map((a) => `<div class="act-row"><span class="grow"><b>${esc(ACT[a].label)}</b></span><span class="lvl lvl-${p.levels[a]}">${levelLabel(p.levels[a])}</span><span class="small muted num">${plural((p.activityCounts || {})[a] || 0, 'plan')}</span></div>`).join('')}</div>
+      <div class="act-list">${p.interests.map((a) => `<div class="act-row"><div class="thumb" style="width:40px;height:40px;border-radius:11px">${actArt(a)}</div><span class="grow"><b>${esc(ACT[a].label)}</b><br><span class="small muted num">${plural((p.activityCounts || {})[a] || 0, 'plan')}</span></span><span class="lvl lvl-${p.levels[a]}">${levelLabel(p.levels[a])}</span></div>`).join('')}</div>
       ${Object.keys(p.activityCounts || {}).filter((a) => !p.interests.includes(a) && p.activityCounts[a] > 0).map((a) => `<p class="small muted" style="margin:0">Also went to: ${esc(ACT[a].label)} · ${plural(p.activityCounts[a], 'plan')}</p>`).join('')}
-      ${p.goals && p.goals.length ? `<div class="row small" style="flex-wrap:wrap"><span class="muted">Here to</span>${p.goals.map((g) => `<span class="chip">${esc(labelIn(GOALS, g))}</span>`).join('')}</div>` : ''}
     </div>
     <div class="card"><div class="h3">What people say</div>${tagBarsHTML(p.tags || {}, p.reviews || 0)}</div>`;
 }
@@ -111,10 +122,12 @@ VIEWS.me = () => {
   const pct = nx ? ((S.points - lvl.min) / (nx.min - lvl.min)) * 100 : 100;
   const R = GOODWILL_RULES;
   return bar('Me', false, `<button type="button" class="btn sm ghost" data-act="profile-data">Edit profile</button>`) + `<div class="pad">
-    <p class="eyebrow" style="text-align:center;margin:0">Your profile, as others see it</p>
-    ${profileCardHTML(me)}
+    <p class="small muted" style="margin:0">Your profile, as others see it</p>
+    ${posterHTML(me, { card: true })}
+    ${profileBodyHTML(me)}
     <div class="card"><div class="row"><div class="h3 grow">Only you see this</div><span class="lock">private</span></div>
       <div class="meta small">
+        <div><span class="k">Goals</span><span>${ME.goals.length ? ME.goals.map((g) => labelIn(GOALS, g)).join(', ') : 'Not given'}</span></div>
         <div><span class="k">Age</span><span>${ME.age != null ? ME.age : 'Not given'}</span></div>
         <div><span class="k">Avoid</span><span>${ME.avoid.length ? ME.avoid.map((a) => labelIn(AVOIDS, a)).join(', ') : 'Nothing'}</span></div>
         <div><span class="k">Free</span><span>${ME.free.length ? ME.free.map((f) => labelIn(AVAILABILITY, f)).join(', ') : 'Not given'}</span></div>
@@ -159,11 +172,11 @@ VIEWS.person = ({ v: id }) => {
   let cta = '';
   if (fromResults && S.intent) cta = `<button type="button" class="btn block ${invited ? 'done' : 'sea'}" data-act="invite" data-v="${id}" ${invited ? 'disabled' : ''}>${invited ? 'Invited to your ask' : 'Invite to your ask'}</button>`;
   else if (myUpcoming.length) cta = `<button type="button" class="btn block ${invited ? 'done' : 'sea'}" data-act="invite-plan" data-v="${id}" ${invited ? 'disabled' : ''}>${invited ? 'Invited' : 'Invite to your plan'}</button>`;
-  return bar(esc(p.name)) + `<div class="pad">
-    ${profileCardHTML(p)}
+  return bar(esc(p.name), true, '', { over: true }) + posterHTML(p) + `<div class="pad sheet-up">
+    ${profileBodyHTML(p)}
     ${ask ? `<div class="card"><p class="eyebrow">Their open ask</p><p class="quote">${esc(ask.text)}</p>${fit ? reasonsHTML(fit.fit.reasons) : ''}</div>` : ''}
     ${cta}
-    <p class="small muted" style="margin:0;text-align:center">Their age, avoid list, free times and phone number are never shown.</p>
+    <p class="small muted" style="margin:0;text-align:center">Their age, goals, avoid list, free times and phone number are never shown.</p>
     <button type="button" class="link-btn" data-act="report" data-v="${id}" style="justify-self:center;color:var(--flag)">Report or block ${esc(p.name)}</button>
   </div>`;
 };

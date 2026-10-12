@@ -114,7 +114,7 @@ VIEWS.compose = () => {
     ACTIVITIES.filter((a) => a.cat !== 'service').forEach((a) => (groups[a.group] ||= []).push(a));
     return bar('Create a plan') + `<div class="pad">
       <div><p class="eyebrow">New plan</p><h1 class="h1">What are you organising?</h1></div>
-      ${Object.entries(groups).map(([gname, acts]) => `<p class="small muted" style="margin:0">${gname}</p><div class="chips">${acts.map((a) => `<button type="button" class="chip" data-act="d-act" data-v="${a.id}">${esc(a.label)}</button>`).join('')}</div>`).join('')}
+      ${Object.entries(groups).map(([gname, acts]) => `<p class="small muted" style="margin:0">${gname}</p><div class="tile-grid">${acts.map((a) => `<button type="button" class="tile" data-act="d-act" data-v="${a.id}">${actArt(a.id)}<span class="tile-label">${esc(a.label)}</span></button>`).join('')}</div>`).join('')}
       <p class="small muted" style="margin:0">Home help and paid services aren't in the MVP.</p>
     </div>`;
   }

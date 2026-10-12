@@ -37,11 +37,10 @@ allowed values. It's driven by `PROFILE_FIELDS` in `profile.js`.
 | Field | Label | Type | Required | Allowed values / validation | Set by | Example |
 | --- | --- | --- | --- | --- | --- | --- |
 | `first_name` | First name | text | yes | 1–30 letters, spaces, hyphens, apostrophes. One first name, or a double one like "Mary Jane". Never a surname. | Onboarding chat | `Mia` |
-| `photo` | Photo | image | yes | A clear photo of the face, checked against a selfie (`photo_status`: pending, verified, rejected). Must be verified before joining plans. | Sign-up | – |
+| `photo` | Photo | image | no | Optional but encouraged. A clear photo of the face, checked against a selfie (`photo_status`: none, pending, verified, rejected). Without one, the profile shows initials on a colour gradient and organisers see "No photo yet". | You | – |
 | `home_suburb` | Home suburb | ref Suburb | yes | One suburb from the list (§1.5). Shown as the name plus a rounded distance, never an address. | Onboarding chat | `Manly` |
 | `bio` | About you | text | no | Up to 160 characters. Screened: contact details and payment talk can't be saved. | You | `Usually on court before work.` |
 | `interests` | Activities and levels | list of {activity, level} | yes | 1–10 entries. `activity` from the tag list (§1.5), `level` from Levels (§1.5). | Onboarding chat | `[{padel, intermediate}, {surfing, casual}]` |
-| `goals` | Here to | list | no | Up to 3 from Goals (§1.5). | Onboarding chat | `[friends, fitness]` |
 
 ### 1.2 Private fields
 
@@ -52,6 +51,7 @@ allowed values. It's driven by `PROFILE_FIELDS` in `profile.js`.
 | `travel_radius_km` | How far you'll travel | int | no | 2, 5, 10, 20 or 50. Default 10. | Onboarding chat | `10` |
 | `avoid` | Things to avoid | list | no | Any of Avoid (§1.5). Plans with these traits are held back from suggestions, with a count. | Onboarding chat | `[alcohol]` |
 | `availability` | Usually free | list | no | Any of Availability (§1.5). Used to rank plans by time. | Onboarding chat | `[wd-pm, we-am]` |
+| `goals` | What you want from Keen | list | no | Up to 3 from Goals (§1.5). Internal only: tunes recommendations (§6), never shown to anyone. | Onboarding chat | `[friends, fitness]` |
 | `asks_per_week` | Asks from Keen per week | int | no | 0, 1, 3, 5 or 7. Default 3. Caps the "might be keen" asks they receive. | You | `3` |
 | `blocked_user_ids` | Blocked people | list | no | Set by blocking. Mutual and silent. | Report or block | – |
 
@@ -60,7 +60,7 @@ allowed values. It's driven by `PROFILE_FIELDS` in `profile.js`.
 | Field | Label | Calculated from | Rule | Example |
 | --- | --- | --- | --- | --- |
 | `member_since` | Member since | Sign-up date | Shown as month and year. | `Mar 2025` |
-| `verification` | Verification | Checks | `phone` (always), `photo` (always), `id` (optional). Shown as badges; the documents never are. | phone, photo, id |
+| `verification` | Verification | Checks | `phone` (always), `photo` (when they've added one), `id` (optional). Shown as badges; the documents never are. | phone, photo, id |
 | `goodwill` | Goodwill | The Goodwill ledger (§1.4) | Sum of ledger entries, never below 0. | `5,020` |
 | `goodwill_level` | Goodwill level | Goodwill | New 0–199 · Regular 200–999 · Trusted 1,000–2,999 · Local legend 3,000+. | `Local legend` |
 | `events_attended` | Plans attended | Confirmed attendance (§9) | Counted only once someone who was there confirms it. | `48` |
@@ -108,7 +108,7 @@ New-level limits (under 200): can join plans, at most 3 invites a day, and can't
 | Hobbies | Bushwalk (`hiking`), Local tour (`explore`), Board games (`boardgames`), Chess (`chess`), Photo walk (`photowalk`), Music jam (`jam`) |
 | Professional skills | Language exchange (`language`). Home fix-it (`diy`) exists as a tag but is blocked in the MVP. |
 
-**Goals** (up to 3): `fitness` Get fitter · `friends` Make new friends · `learn` Learn something new · `compete` Compete ·
+**Goals** (up to 3, private): `fitness` Get fitter · `friends` Make new friends · `learn` Learn something new · `compete` Compete ·
 `outdoors` Get outdoors · `unwind` Unwind.
 
 **Avoid** (any), each with the plans it holds back:
@@ -136,11 +136,11 @@ Newtown, Marrickville, Bondi, Bronte, Coogee, Parramatta.
 
 | | Anyone signed in | The person | Keen only |
 | --- | --- | --- | --- |
-| First name, photo, suburb, about, activities and levels, goals | ✓ | ✓ | |
+| First name, photo (or initials), suburb, about, activities and levels | ✓ | ✓ | |
 | Member since, verification badges, Goodwill and level | ✓ | ✓ | |
 | Plans attended, hosted, no-shows, hosting rating, positive tags, plans per activity | ✓ | ✓ | |
 | "Played with you" | the other person only | ✓ | |
-| Age, phone, travel distance, avoid list, free times, asks per week | | ✓ | ✓ |
+| Age, phone, travel distance, goals, avoid list, free times, asks per week | | ✓ | ✓ |
 | Negative feedback, reports, blocked list | | | ✓ |
 
 ## 2. Event
@@ -256,20 +256,29 @@ Search finds **events, never people**.
 For every open, public event within the travel radius that the person isn't already in:
 
 ```
-score = 0.30 interest     listed 0.75, +0.05 per attended event of that activity (max 1); same category 0.45; else 0.1
-      + 0.15 social       people you've played with who are going (3 shared events = 1)
-      + 0.13 free time    the event's time bucket is in your availability: 1, otherwise 0.3
-      + 0.12 level fit    1, 0.8, 0.5 or 0.3 by how many levels apart
-      + 0.12 soon         1 today, falling to 0 at 7 days
-      + 0.10 momentum     how close the event is to full
-      + 0.08 trust        organiser Goodwill / 1500, capped at 1
+score = 0.28 interest     listed 0.75, +0.05 per attended event of that activity (max 1); same category 0.45; else 0.1
+      + 0.14 social       people you've played with who are going (3 shared events = 1)
+      + 0.12 free time    the event's time bucket is in your availability: 1, otherwise 0.3
+      + 0.11 level fit    1, 0.8, 0.5 or 0.3 by how many levels apart
+      + 0.11 soon         1 today, falling to 0 at 7 days
+      + 0.08 momentum     how close the event is to full
+      + 0.08 trust        organiser Goodwill / 3000, capped at 1
+      + 0.08 goals        1 if the event suits one of your private goals, 0.3 if none do, 0.5 if you set no goals
+
+goal matches:  fitness  → sports and fitness activities, bushwalks
+               friends  → groups of 6+ or with 2+ people interested
+               learn    → beginner level, clinics, "basics"
+               compete  → intermediate or competitive level
+               outdoors → outdoor activities at outdoor venues
+               unwind   → casual games, creative, outdoors or local plans
 ```
 
 Hard filters run first: **AVOIDS** trait (held back, with a count shown), **BLOCKED** in either direction, already a
 member, past events, events outside the radius. The weights are starting points to tune against join and attendance rates.
 
 Each recommendation carries its reasons ("Mia and Luca are going", "You've been to 3 padel plans", "Fits your free
-time") and the edges for the "why" graph.
+time", "Good for getting fitter") and the edges for the "why" graph. A goal reason is shown only to the person whose goal
+it is.
 
 ## 7. Create an event
 

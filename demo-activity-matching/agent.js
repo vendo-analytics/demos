@@ -55,7 +55,7 @@ function question(topic, p) {
     case 'activities': return `Nice to meet you, ${p.name}. What do you like doing, or want to start doing? Sports, hobbies, anything goes.`;
     case 'area': return 'Where are you based, and how far would you travel for a game?';
     case 'age': return "How old are you? It's only used to keep Keen 18+ and to match similar ages if you want. It never shows on your profile.";
-    case 'goals': return 'What are you hoping to get out of Keen? Getting fitter, meeting new people, learning something, competing?';
+    case 'goals': return 'What are you hoping to get out of Keen? Getting fitter, meeting new people, learning something, competing? This stays private and just tunes what I suggest.';
     case 'avoid': return "Anything you'd rather avoid? Water sports, heights, alcohol, late nights. This stays private. We just won't suggest those.";
     case 'free': return 'Last one. When are you usually free?';
     case 'done': return "That's everything. Here's your profile. Change anything that's off, then you're in.";

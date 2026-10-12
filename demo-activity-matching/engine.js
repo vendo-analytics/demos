@@ -411,7 +411,8 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   const freeFit = !profile.free || !profile.free.length ? 0.7 : profile.free.includes(bucket) ? 1 : 0.3;
   const friends = plan.members.filter((m) => ctx.played[m]);
   const social = Math.min(1, friends.reduce((k, m) => k + ctx.played[m], 0) / 3);
-  const score = 0.3 * interest + 0.12 * soon + 0.1 * momentum + 0.08 * trust + 0.12 * levelFit + 0.13 * freeFit + 0.15 * social;
+  const goal = goalFit(profile.goals || [], plan, act, venue);
+  const score = 0.28 * interest + 0.11 * soon + 0.08 * momentum + 0.08 * trust + 0.11 * levelFit + 0.12 * freeFit + 0.14 * social + 0.08 * goal.score;
 
   const BUCKET_LABEL = { 'wd-am': 'weekday mornings', 'wd-pm': 'weekday evenings', 'we-am': 'weekend mornings', 'we-pm': 'weekend afternoons' };
   const edges = [
@@ -421,6 +422,7 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   ];
   if (friends.length) edges.push({ key: 'people', node: friends.map((m) => PERSON[m].name).slice(0, 2).join(', '), you: 'played with you', ok: true });
   if (mine && plan.skill) edges.push({ key: 'level', node: cap(plan.skill), you: `you're ${mine}`, ok: levelFit >= 0.8 });
+  if (goal.goal) edges.push({ key: 'goal', node: goal.label, you: 'your goal', ok: true });
 
   const reasons = [];
   if (friends.length) reasons.push({ ok: true, text: `${friends.map((m) => PERSON[m].name).slice(0, 2).join(' and ')} ${friends.length === 1 ? 'is' : 'are'} going` });
@@ -428,11 +430,30 @@ function scoreEvent(profile, plan, ctx = { played: {}, actCount: {} }, now = new
   else if (near) reasons.push({ ok: false, text: `Like ${profile.interests.filter((i) => ACT[i].cat === act.cat).map((i) => ACT[i].label.toLowerCase())[0]}` });
   reasons.push({ ok: true, text: dist < 0.8 ? `In ${plan.place}` : `${dist.toFixed(1)} km` });
   if (freeFit === 1) reasons.push({ ok: true, text: 'Fits your free time' });
+  if (goal.goal) reasons.push({ ok: true, text: goal.reason });
   if (left > 0 && left <= 2) reasons.push({ ok: true, text: `${left} spot${left === 1 ? '' : 's'} left` });
   if (mine && plan.skill && levelFit < 0.8) reasons.push({ ok: false, text: `${cap(plan.skill)} level` });
 
   const clash = planTraits(plan, now).filter((tr) => (profile.avoid || []).includes(tr));
   return { plan, slot, dist, score, reasons, edges, into, near, left, clash };
+}
+
+// Goals are private: they never show on a profile, they only nudge recommendations.
+const OUTDOOR_CATS = ['water', 'outdoors', 'team', 'racquet', 'fitness'];
+const INDOOR_VENUES = ['manly-library', 'corso-cafe', 'wharf-bar', 'marrickville-gym'];
+function goalFit(goals, plan, act, venue) {
+  const checks = {
+    fitness: [['fitness', 'team', 'racquet', 'water'].includes(act.cat) || act.id === 'hiking', 'Good for getting fitter'],
+    friends: [plan.size >= 6 || (plan.interested || []).length >= 2, 'A good group to meet people'],
+    learn: [plan.skill === 'beginner' || /learn|clinic|beginner|basics/i.test(`${plan.title} ${plan.note || ''}`), 'Good for learning'],
+    compete: [['intermediate', 'competitive'].includes(plan.skill), 'A proper game'],
+    outdoors: [OUTDOOR_CATS.includes(act.cat) && !(venue && INDOOR_VENUES.includes(venue.id)), 'Outdoors'],
+    unwind: [plan.skill === 'casual' && ['games', 'creative', 'outdoors', 'local'].includes(act.cat), 'Relaxed and easy'],
+  };
+  const hit = goals.find((g) => checks[g] && checks[g][0]);
+  if (!hit) return { score: goals.length ? 0.3 : 0.5, goal: null };
+  const LABEL = { fitness: 'Get fitter', friends: 'Make new friends', learn: 'Learn something new', compete: 'Compete', outdoors: 'Get outdoors', unwind: 'Unwind' };
+  return { score: 1, goal: hit, label: LABEL[hit], reason: checks[hit][1] };
 }
 
 // Recommendations: open events near you, best first. Avoided ones are held back, not deleted, so the UI can say how many.

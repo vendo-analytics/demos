@@ -5,21 +5,26 @@ const ICON_SEARCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11"
 
 function openEvents() { return [...PLANS, ...S.myPlans.filter((g) => g.org !== 'me')]; }
 
-// One card for an event in any list: recommendation, search result or browse.
+// One card for an event in any list: a big image with the title over it, then who's going and why it fits.
 function eventCard(x, opts = {}) {
   const g = x.plan, org = PERSON[g.org], st = myStatus(g);
   const clashText = (x.clash || []).map((c) => ({ alcohol: 'Licensed venue', water: 'Water', heights: 'Heights', contact: 'Contact sport', late: 'Finishes late', early: 'Early start', big: 'Big group' })[c]);
   const full = g.members.length >= g.size;
+  const left = g.size - g.members.length;
   const cta = st
     ? `<span class="status ${['going', 'attended', 'hosting'].includes(st) ? 'ok' : 'wait'}">${STATUS_LABEL[st]}</span>`
-    : `<button type="button" class="btn sm sea" data-act="join" data-v="${g.id}">${full ? 'Waitlist' : g.approve ? 'Ask to join' : 'Join'}</button>`;
-  return `<article class="card tap feed-card${opts.clashed ? ' clashed' : ''}" data-act="plan" data-v="${g.id}">
-    <div class="row"><span class="act-tag grow">${esc(ACT[g.act].label)}</span><span class="small muted num">${esc(fmtSlot(x.slot, NOW))}</span></div>
-    <div class="h3">${esc(g.title)}</div>
-    <div class="muted small" style="margin-top:-6px">${esc(g.venue)}</div>
-    <div class="row">${spots(g.members.length, g.size)}<span class="small muted num">${g.members.length}/${g.size}</span>${(g.interested || []).length ? `<span class="small muted">· ${g.interested.length} interested</span>` : ''}</div>
-    ${reasonsHTML([...x.reasons, ...clashText.map((t) => ({ ok: false, text: t }))].slice(0, opts.short ? 3 : 6))}
-    <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)} ${gw(org.points)}</span></span>${cta}</div>
+    : `<button type="button" class="btn sm" data-act="join" data-v="${g.id}">${full ? 'Waitlist' : g.approve ? 'Ask to join' : 'Join'}</button>`;
+  const faces = g.members.slice(0, 4).map((m) => avatar(PERSON[m], 's')).join('');
+  return `<article class="ecard${opts.slide ? ' slide' : ''}${opts.clashed ? ' clashed' : ''}" data-act="plan" data-v="${g.id}">
+    <div class="ecard-media">${actArt(g.act)}<div class="ecard-shade"></div>
+      <div class="ecard-top"><span class="pill-glass">${esc(ACT[g.act].label)}</span><span class="pill-glass${eventPhase(g, NOW) === 'live' ? ' hot' : ''}">${esc(fmtSlot(x.slot, NOW))}</span></div>
+      <div class="ecard-title"><h3>${esc(g.title)}</h3><p>${esc(g.venue)}</p></div>
+    </div>
+    <div class="ecard-body">
+      <div class="row"><span class="stack">${faces}</span><span class="small muted grow">${g.members.length} going${(g.interested || []).length ? ` · ${g.interested.length} interested` : ''}</span><span class="small ${left <= 2 && left > 0 ? '' : 'muted'}" style="${left <= 2 && left > 0 ? 'color:var(--flag);font-weight:600' : ''}">${full ? 'Full' : `${left} left`}</span></div>
+      ${reasonsHTML([...x.reasons, ...clashText.map((t) => ({ ok: false, text: t }))].slice(0, opts.short ? 3 : 5))}
+      <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)}</span>${gw(org.points)}</span>${cta}</div>
+    </div>
   </article>`;
 }
 
@@ -29,12 +34,12 @@ function hiddenNoteHTML(hidden, act) {
   return `<div class="hidden-note"><span>${plural(hidden.length, 'plan')} hidden because you'd rather avoid ${esc(avoided.join(' and '))}.</span><button type="button" class="link-btn" data-act="${act}">${S.showHidden ? 'Hide again' : 'Show'}</button></div>${S.showHidden ? hidden.map((x) => eventCard(x, { clashed: true })).join('') : ''}`;
 }
 
-// Ask tab: the top few recommendations under the ask box.
+// Ask tab: the top few recommendations under the ask box, as sliding cards.
 function feedHTML() {
   const { shown } = rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow() });
-  const top = shown.filter((x) => !myStatus(x.plan)).slice(0, 3);
-  return `<div class="section-h"><h3 class="h3">Picked for you</h3><button type="button" class="link-btn" data-act="tab" data-v="explore">See all in Explore</button></div>
-    ${top.map((x) => eventCard(x, { short: true })).join('') || '<p class="small muted">Nothing nearby yet. Ask for what you want above.</p>'}`;
+  const top = shown.filter((x) => !myStatus(x.plan)).slice(0, 5);
+  return `<div class="section-h"><h3 class="h3">Picked for you</h3><button type="button" class="link-btn" data-act="tab" data-v="explore">See all</button></div>
+    ${top.length ? `<div class="carousel">${top.map((x) => eventCard(x, { short: true, slide: true })).join('')}</div>` : '<p class="small muted">Nothing nearby yet. Ask for what you want above.</p>'}`;
 }
 
 // ---------- Explore screen ----------
@@ -58,20 +63,24 @@ function updateExplore() {
 
 function exploreHomeHTML() {
   const { shown, hidden } = rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow() });
-  const recs = shown.filter((x) => !myStatus(x.plan)).slice(0, 4);
+  const recs = shown.filter((x) => !myStatus(x.plan));
+  const weekend = recs.filter((x) => [0, 6].includes(x.slot.start.getDay()) && (x.slot.start - NOW) / 864e5 < 7);
   const idx = browseIndex(ME, openEvents(), NOW);
   const days = Array.from({ length: 7 }, (_, i) => +startOfDay(new Date(+NOW + i * 864e5)));
-  const groups = {};
-  ACTIVITIES.filter((a) => a.cat !== 'service').forEach((a) => (groups[a.group] ||= []).push(a));
+  const acts = ACTIVITIES.filter((a) => a.cat !== 'service');
+  const withPlans = acts.filter((a) => idx.byAct[a.id]).sort((a, b) => idx.byAct[b.id] - idx.byAct[a.id]);
+  const without = acts.filter((a) => !idx.byAct[a.id]);
   return `
-    <div class="section-h"><h3 class="h3">For you</h3><span class="small muted">from your interests, history and free time</span></div>
-    ${recs.map((x) => eventCard(x)).join('')}
+    <div class="section-h"><h3 class="h3">For you</h3><span class="small muted">${plural(recs.length, 'plan')}</span></div>
+    <div class="carousel">${recs.slice(0, 6).map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>
     ${hiddenNoteHTML(hidden, 'ex-hidden')}
-    <div class="section-h"><h3 class="h3">Browse by day</h3><span class="small muted">within ${ME.radius || 10} km</span></div>
-    <div class="day-strip">${days.map((d) => `<button type="button" class="day" data-act="ex-day" data-v="${d}" ${idx.byDay[d] ? '' : 'disabled'}><span class="small muted">${new Date(d).toLocaleDateString('en-AU', { weekday: 'short' })}</span><b class="num">${new Date(d).getDate()}</b><span class="small num">${idx.byDay[d] || 0}</span></button>`).join('')}</div>
+    ${weekend.length ? `<div class="section-h"><h3 class="h3">This weekend</h3><span class="small muted">${plural(weekend.length, 'plan')}</span></div>
+    <div class="carousel">${weekend.map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>` : ''}
     <div class="section-h"><h3 class="h3">Browse by activity</h3></div>
-    ${Object.entries(groups).map(([gname, acts]) => `<p class="small muted" style="margin:0">${gname}</p><div class="chips">${acts.map((a) => `<button type="button" class="chip" data-act="ex-act" data-v="${a.id}" ${idx.byAct[a.id] ? '' : 'disabled'}>${esc(a.label)} <span class="num muted">${idx.byAct[a.id] || 0}</span></button>`).join('')}</div>`).join('')}
-    <p class="small muted" style="margin:0">Can't find it? <button type="button" class="link-btn" data-act="tab" data-v="ask">Ask for it</button> and we'll find people, or <button type="button" class="link-btn" data-act="create">create a plan</button>.</p>`;
+    <div class="carousel tiles">${withPlans.map((a) => `<button type="button" class="tile" data-act="ex-act" data-v="${a.id}">${actArt(a.id)}<span class="tile-label">${esc(a.label)}<small>${plural(idx.byAct[a.id], 'plan')}</small></span></button>`).join('')}</div>
+    ${without.length ? `<p class="small muted" style="margin:0">Nothing nearby yet for ${esc(without.slice(0, 4).map((a) => a.label.toLowerCase()).join(', '))}${without.length > 4 ? ` and ${without.length - 4} more` : ''}. <button type="button" class="link-btn" data-act="tab" data-v="ask">Ask for it</button> or <button type="button" class="link-btn" data-act="create">start one</button>.</p>` : ''}
+    <div class="section-h"><h3 class="h3">Browse by day</h3><span class="small muted">within ${ME.radius || 10} km</span></div>
+    <div class="day-strip">${days.map((d) => `<button type="button" class="day" data-act="ex-day" data-v="${d}" ${idx.byDay[d] ? '' : 'disabled'}><span class="small muted">${new Date(d).toLocaleDateString('en-AU', { weekday: 'short' })}</span><b class="num">${new Date(d).getDate()}</b><span class="small num" style="color:var(--flag)">${idx.byDay[d] || ''}</span></button>`).join('')}</div>`;
 }
 
 function exFilters() {

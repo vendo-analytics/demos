@@ -54,11 +54,12 @@ create table users (
   bio              text check (length(bio) <= 160),
   home_suburb_id   text not null references suburbs(id),
   joined_at        timestamptz not null default now(),
-  goals            text[] not null default '{}' check (cardinality(goals) <= 3),
-  photo_status     text not null default 'pending' check (photo_status in ('pending', 'verified', 'rejected')),
+
+  photo_status     text not null default 'none' check (photo_status in ('none', 'pending', 'verified', 'rejected')),
   id_verified      boolean not null default false,
   goodwill         int not null default 0 check (goodwill >= 0),  -- cached sum of goodwill_ledger, floored at 0
   -- private
+  goals            text[] not null default '{}' check (cardinality(goals) <= 3),  -- tunes recommendations only
   phone_e164       text not null unique,
   birth_year       int not null check (birth_year > 1900),   -- 18+ is enforced at sign-up
   travel_radius_km int not null default 10 check (travel_radius_km in (2, 5, 10, 20, 50)),
