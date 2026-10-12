@@ -173,6 +173,18 @@ create table saved_searches (
 );
 create index on saved_searches (activity_id);
 
+-- "Not for me" and "Show fewer" from a recommendation card (MODEL.md §6.1). Private; decays after 60 days.
+create table recommendation_feedback (
+  id          bigserial primary key,
+  user_id     uuid not null references users(id) on delete cascade,
+  kind        text not null check (kind in ('hide', 'fewer')),
+  event_id    uuid references events(id) on delete cascade,  -- for 'hide'
+  activity_id text references activities(id),                -- for 'fewer'
+  created_at  timestamptz not null default now(),
+  check ((kind = 'hide' and event_id is not null) or (kind = 'fewer' and activity_id is not null))
+);
+create index on recommendation_feedback (user_id, created_at);
+
 -- Search log, kept 90 days. Never shown to anyone. Zero-result queries are demand: grouped by suburb and term,
 -- they tell Keen which activities to suggest to people who could host them ("12 people near Manly searched yoga").
 create table search_log (

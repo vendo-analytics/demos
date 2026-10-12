@@ -34,6 +34,7 @@ const S = {
   rc: null,
   ex: { q: '', act: null, day: null, drop: {}, when: null, radius: null, level: null, spots: false, open: false, sort: 'best', focus: false, view: 'list', mapR: null, pin: null },
   searchRecent: [],
+  recFb: { dismissed: new Set(), fewer: {} },
   savedSearches: [],
   hidden: new Set(),
   myAsks: MY_ASKS.map((a) => ({ ...a })),
@@ -361,12 +362,14 @@ function sheet(html) {
 function closeSheet() { $('#overlay').innerHTML = ''; }
 
 let toastTimer;
-function toast(msg) {
+// opts.undo: an action name; the toast then carries an Undo button that runs it.
+function toast(msg, opts = {}) {
   closeSheet();
   const el = document.createElement('div');
   el.className = 'toast';
   el.setAttribute('role', 'status');
   el.textContent = msg;
+  if (opts.undo) el.insertAdjacentHTML('beforeend', ` <button type="button" class="toast-undo" data-act="${opts.undo}" data-v="${esc(opts.v || '')}">Undo</button>`);
   $('#phone').appendChild(el);
   clearTimeout(toastTimer);
   document.querySelectorAll('.toast').forEach((t) => t !== el && t.remove());
@@ -598,6 +601,8 @@ const NOTES = {
     body: `<ul>
       <li><b>For you</b> ranks open plans by how you connect to them in the graph: activities you list and actually turn up to, distance, whether it fits your free time, your level, people you've played with who are going, how close it is to filling, and the organiser's Goodwill.</li>
       <li>Plans that clash with your private avoid list are held back, with a count and a way to show them.</li>
+      <li>A plan at the same time as one you're going to drops down and says "Clashes with …". The top of the list is mixed so one activity can't fill it.</li>
+      <li>The "⋯" on a For you card: <b>Not for me</b> hides the plan, <b>Show fewer</b> lowers that activity. Both have Undo and a Reset. The organiser is never told.</li>
       <li>Browse rows have fixed rules, shown under each title: next 48 hours, this weekend, needs one or two more, good for beginners, after work. "See all" opens search with that filter.</li>
       <li><b>Browse by day</b> and <b>by activity</b> show counts within your travel radius. Activities with nothing on are greyed, not hidden.</li>
       <li><b>Map</b> pins venues with the number of open plans; close pins group until you zoom in. A venue has directions and "Start one here". People are never on the map.</li>
@@ -672,6 +677,8 @@ const NOTES = {
     body: `<ul>
       <li><b>Happening near you.</b> Below the box is a feed of open plans, ranked by your interests, your level, how soon they are and how close they are to filling. You can browse events. You can never browse people.</li>
       <li>Plans that clash with your private avoid list are held back, with a count and a way to show them.</li>
+      <li>A plan at the same time as one you're going to drops down and says "Clashes with …". The top of the list is mixed so one activity can't fill it.</li>
+      <li>The "⋯" on a For you card: <b>Not for me</b> hides the plan, <b>Show fewer</b> lowers that activity. Both have Undo and a Reset. The organiser is never told.</li>
       <li>People don't browse other people. They say what they want and Keen does the finding. From the notebook: <em>"We don't have search. You ask, we reach out to people that may be interested."</em></li>
       <li>The sentence becomes a small graph with five nodes: what, where, when, group, level. Activity and time are required. Place falls back to your home suburb.</li>
       <li>Every node is a tap target. When the parser gets something wrong you fix one node instead of retyping, so the UI never boxes in what someone can ask for. Dashed nodes are guesses.</li>

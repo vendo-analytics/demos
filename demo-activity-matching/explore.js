@@ -5,6 +5,13 @@ const ICON_SEARCH = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11"
 
 function openEvents() { return [...PLANS, ...S.myPlans.filter((g) => g.org !== 'me')]; }
 
+// Plans you've said yes to: a recommendation at the same time says it clashes.
+function myBusy() {
+  return allEvents().filter((g) => !g.past && g.status !== 'cancelled' && ['going', 'hosting', 'requested', 'checked_in'].includes(myStatus(g)))
+    .map((g) => ({ ...slotOf(g, NOW), id: g.id, title: g.title }));
+}
+const feedNow = () => rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow(), busy: myBusy(), feedback: S.recFb });
+
 // One card for an event in any list: a big image with the title over it, then who's going and why it fits.
 function eventCard(x, opts = {}) {
   const g = x.plan, org = PERSON[g.org], st = myStatus(g);
@@ -23,7 +30,7 @@ function eventCard(x, opts = {}) {
     <div class="ecard-body">
       <div class="row"><span class="stack">${faces}</span><span class="small muted grow">${g.members.length} going${(g.interested || []).length ? ` · ${g.interested.length} interested` : ''}</span><span class="small ${left <= 2 && left > 0 ? '' : 'muted'}" style="${left <= 2 && left > 0 ? 'color:var(--flag);font-weight:600' : ''}">${full ? 'Full' : `${left} left`}</span></div>
       ${reasonsHTML([...x.reasons, ...clashText.map((t) => ({ ok: false, text: t }))].slice(0, opts.short ? 3 : 5))}
-      <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)}</span>${gw(org.points)}</span>${cta}</div>
+      <div class="foot"><span class="row small">${avatar(org, 's')}<span>${esc(org.name)}</span>${gw(org.points)}</span><span class="row" style="gap:6px">${opts.feedback ? `<button type="button" class="icon-btn more-btn" data-act="rec-menu" data-v="${g.id}" aria-label="Options for ${esc(g.title)}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button>` : ''}${cta}</span></div>
     </div>
   </article>`;
 }
@@ -36,10 +43,10 @@ function hiddenNoteHTML(hidden, act) {
 
 // Ask tab: the top few recommendations under the ask box, as sliding cards.
 function feedHTML() {
-  const { shown } = rankFeed(ME, openEvents(), { now: NOW, ctx: ctxNow() });
+  const { shown } = feedNow();
   const top = shown.filter((x) => !myStatus(x.plan)).slice(0, 5);
   return `<div class="section-h"><h3 class="h3">Picked for you</h3><button type="button" class="link-btn" data-act="tab" data-v="explore">See all</button></div>
-    ${top.length ? `<div class="carousel">${top.map((x) => eventCard(x, { short: true, slide: true })).join('')}</div>` : '<p class="small muted">Nothing nearby yet. Ask for what you want above.</p>'}`;
+    ${top.length ? `<div class="carousel">${top.map((x) => eventCard(x, { short: true, slide: true, feedback: true })).join('')}</div>` : '<p class="small muted">Nothing nearby yet. Ask for what you want above.</p>'}`;
 }
 
 // ---------- Explore screen ----------
@@ -251,7 +258,7 @@ function miniCard(x, why) {
 
 function browseListHTML() {
   const ctx = ctxNow();
-  const { shown, hidden } = rankFeed(ME, openEvents(), { now: NOW, ctx });
+  const { shown, hidden, dismissed } = feedNow();
   const recs = shown.filter((x) => !myStatus(x.plan));
   const top = recs.slice(0, 6);
   const seen = new Set(top.map((x) => x.plan.id));
@@ -273,8 +280,9 @@ function browseListHTML() {
   }).join('');
   return `${savedSearchesHTML()}
     <div class="section-h"><h3 class="h3">For you</h3><span class="small muted">${plural(recs.length, 'plan')}</span></div>
-    <div class="carousel">${top.map((x) => eventCard(x, { slide: true, short: true })).join('')}</div>
+    <div class="carousel">${top.map((x) => eventCard(x, { slide: true, short: true, feedback: true })).join('')}</div>
     ${hiddenNoteHTML(hidden, 'ex-hidden')}
+    ${feedbackNoteHTML(dismissed)}
     ${colHTML}
     <div class="section-h"><h3 class="h3">Browse by day</h3><span class="small muted">within ${ME.radius || 10} km</span></div>
     <div class="day-strip">${days.map((d, i) => `<button type="button" class="day${i === 0 ? ' today' : ''}" data-act="ex-day" data-v="${d}" ${idx.byDay[d] ? '' : 'disabled'} aria-label="${fmtDay(new Date(d), NOW)}, ${plural(idx.byDay[d] || 0, 'plan')}"><span class="small muted">${i === 0 ? 'Today' : new Date(d).toLocaleDateString('en-AU', { weekday: 'short' })}</span><b class="num">${new Date(d).getDate()}</b><span class="small num" style="color:var(--flag)">${idx.byDay[d] || ''}</span></button>`).join('')}</div>
@@ -282,6 +290,18 @@ function browseListHTML() {
     ${actHTML}
     <p class="small muted" style="margin:0">Nothing for what you want? <button type="button" class="link-btn" data-act="tab" data-v="ask">Ask for it</button> or <button type="button" class="link-btn" data-act="create">start one</button>.</p>`;
 }
+
+// What you've told the feed, with a way to undo it all. Kept private, like goals.
+function feedbackNoteHTML(dismissed) {
+  const fewer = Object.keys(S.recFb.fewer).filter((a) => S.recFb.fewer[a]);
+  if (!dismissed && !fewer.length) return '';
+  const parts = [];
+  if (dismissed) parts.push(`hidden ${plural(dismissed, 'plan')}`);
+  if (fewer.length) parts.push(`asked for fewer ${fewer.map((a) => ACT[a].label.toLowerCase()).join(' and ')}`);
+  return `<div class="hidden-note"><span>You've ${parts.join(' and ')}.</span><button type="button" class="link-btn" data-act="rec-reset">Reset</button></div>`;
+}
+
+const refreshFeed = () => { if (view().name === 'explore') updateExplore(); else if (S.tab === 'ask' && !S.stack.length) updatePreview(); };
 
 // ---------- map ----------
 // A schematic map around your home suburb: suburbs as labels, venues as pins sized by open plans,
@@ -381,6 +401,19 @@ Object.assign(ACTIONS, {
     updateExplore();
   },
   'ex-run-saved': (i) => { const x = S.savedSearches[+i]; S.ex = { ...EX_BLANK(), q: x.q, act: x.act, when: x.when, radius: x.radius, level: x.level, spots: x.spots, open: x.open }; render(); },
+  'rec-menu': (id) => {
+    const g = findPlan(id), a = ACT[g.act];
+    sheet(`<div class="h3">${esc(g.title)}</div>
+      <button type="button" class="btn block ghost" data-act="rec-hide" data-v="${id}">Not for me: hide this plan</button>
+      <button type="button" class="btn block ghost" data-act="rec-fewer" data-v="${g.act}">Show fewer ${esc(a.label.toLowerCase())} plans</button>
+      <button type="button" class="btn block ghost" data-act="plan" data-v="${id}">Why am I seeing this?</button>
+      <p class="small muted" style="margin:0">Only changes what Keen suggests to you. ${esc(PERSON[g.org].name)} isn't told.</p>`);
+  },
+  'rec-hide': (id) => { S.recFb.dismissed.add(id); refreshFeed(); toast("Hidden. We'll suggest fewer like it.", { undo: 'rec-unhide', v: id }); },
+  'rec-unhide': (id) => { S.recFb.dismissed.delete(id); refreshFeed(); toast('Back in your suggestions.'); },
+  'rec-fewer': (act) => { S.recFb.fewer[act] = (S.recFb.fewer[act] || 0) + 1; refreshFeed(); toast(`Showing fewer ${ACT[act].label.toLowerCase()} plans.`, { undo: 'rec-unfewer', v: act }); },
+  'rec-unfewer': (act) => { S.recFb.fewer[act] = Math.max(0, (S.recFb.fewer[act] || 0) - 1); refreshFeed(); toast('Undone.'); },
+  'rec-reset': () => { S.recFb = { dismissed: new Set(), fewer: {} }; refreshFeed(); toast('Suggestions reset.'); },
   'ex-view': (v) => { S.ex.view = v; S.ex.pin = null; updateExplore(); },
   'ex-mapr': (v) => { S.ex.mapR = +v; S.ex.pin = null; updateExplore(); },
   'ex-pin': (v) => { S.ex.pin = S.ex.pin === v || !v ? null : v; updateExplore(); },

@@ -443,8 +443,44 @@ goal matches:  fitness  → sports and fitness activities, bushwalks
                unwind   → casual games, creative, outdoors or local plans
 ```
 
+Then adjustments, each shown to the person as a reason or an edge in the "why" graph:
+
+```
+      - 0.15 someone you rated badly is organising or going (they're never told)
+      - 0.30 overlaps a plan you're going to, hosting or have asked to join   → "Clashes with Saturday padel ladder"
+      - 0.12 per "Show fewer <activity>" you've tapped
+      - 0.20 the plan is full (only a waitlist left)
+```
+
 Hard filters run first: **AVOIDS** trait (held back, with a count shown), **BLOCKED** in either direction, already a
-member, past events, events outside the radius. The weights are starting points to tune against join and attendance rates.
+member, past events, events outside the radius, plans you've hidden with "Not for me". The weights are starting points
+to tune against join and attendance rates.
+
+**Variety.** The top 10 are re-ordered greedily: each earlier pick of the same activity costs 0.07, so a padel regular
+still sees padel first but not six padel plans in a row.
+
+**Cold start.** With no history, interest comes from the activities chosen in onboarding, and free time and goals from
+what was said there. With nothing at all, the score falls back to distance, soonness, momentum and organiser trust,
+which favours busy, nearby, well-run plans.
+
+### 6.1 Telling the feed what you think
+
+Every card in **For you** has a "⋯" menu:
+
+| Choice | Effect | Stored |
+|---|---|---|
+| Not for me: hide this plan | Removed from your suggestions; counted under the row with **Reset** | `recommendation_feedback (kind = 'hide')` |
+| Show fewer padel plans | −0.12 per tap on that activity, and a "you asked for fewer" edge | `recommendation_feedback (kind = 'fewer')` |
+| Why am I seeing this? | Opens the plan's "why" graph | — |
+
+Both have Undo. The organiser is never told. Feedback decays after 60 days, so a "fewer" isn't permanent.
+
+### 6.2 Where recommendations appear
+
+- **Explore → For you:** top 6 as large cards with reasons.
+- **Ask tab → Picked for you:** top 5 under the ask box.
+- **Notifications:** at most `asks_per_week` per person per week, shared with asks and invites (§3.4), and only for
+  plans scoring 0.7 or more.
 
 Each recommendation carries its reasons ("Mia and Luca are going", "You've been to 3 padel plans", "Fits your free
 time", "Good for getting fitter") and the edges for the "why" graph. A goal reason is shown only to the person whose goal

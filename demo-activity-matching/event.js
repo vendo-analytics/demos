@@ -125,8 +125,9 @@ function directionsHTML(g) {
 
 // "Why you're seeing this": the graph path from you to the event.
 function whyHTML(g) {
-  const r = scoreEvent(ME, g, ctxNow(), NOW);
-  const E = r.edges;
+  // Same numbers as the feed (calendar clashes and your "fewer" feedback included) when the plan is in it
+  const r = feedNow().shown.find((x) => x.plan.id === g.id) || scoreEvent(ME, g, ctxNow(), NOW);
+  const E = r.busy ? [...r.edges, { key: 'busy', node: r.busy, you: 'you are going', ok: false }] : r.edges;
   const W = 340, rowH = 42, H = E.length * rowH + 8;
   const yOf = (i) => 4 + rowH / 2 + i * rowH;
   const cy = H / 2;

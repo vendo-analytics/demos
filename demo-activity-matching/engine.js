@@ -473,20 +473,48 @@ function goalFit(goals, plan, act, venue) {
 }
 
 // Recommendations: open events near you, best first. Avoided ones are held back, not deleted, so the UI can say how many.
+// opts.busy:     [{id, start, end, title}] plans you're going to or hosting; an overlapping plan drops and says why
+// opts.feedback: { dismissed: Set(planId), fewer: { activityId: n } } from "Not for me" on a card
+// The top of the list is then re-ordered for variety, so one activity can't fill the whole carousel.
+const FEED = { busyPenalty: 0.3, fewerPenalty: 0.12, repeatPenalty: 0.07, fullPenalty: 0.2, diversifyTop: 10 };
+
 function rankFeed(profile, plans, opts = {}) {
   const now = opts.now || new Date();
   const ctx = opts.ctx || { played: {}, actCount: {} };
   const radius = opts.radius || profile.radius || 10;
+  const fb = opts.feedback || {};
+  const busy = opts.busy || [];
   const shown = [], hidden = [];
+  let dismissed = 0;
   for (const plan of plans) {
     if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id)) || touchesBlocked(plan, ctx)) continue;
     if (eventPhase(plan, now) === 'done') continue;
+    if (fb.dismissed && fb.dismissed.has(plan.id)) { dismissed++; continue; }
     const item = scoreEvent(profile, plan, ctx, now);
     if (item.dist > radius) continue;
+    const fewer = (fb.fewer && fb.fewer[plan.act]) || 0;
+    if (fewer) { item.score -= FEED.fewerPenalty * fewer; item.edges.push({ key: 'feedback', node: ACT[plan.act].label, you: 'you asked for fewer', ok: false }); }
+    const overlap = busy.find((b) => b.id !== plan.id && b.start < item.slot.end && b.end > item.slot.start);
+    if (overlap) { item.score -= FEED.busyPenalty; item.busy = overlap.title; item.reasons.unshift({ ok: false, text: `Clashes with ${overlap.title}` }); }
+    if (item.left <= 0) item.score -= FEED.fullPenalty; // only a waitlist: still shown, lower down
     (item.clash.length ? hidden : shown).push(item);
   }
   shown.sort((a, b) => b.score - a.score);
-  return { shown, hidden };
+  return { shown: diversify(shown), hidden, dismissed };
+}
+
+// Greedy re-rank of the top few: each earlier pick of the same activity costs a little.
+function diversify(list) {
+  const top = list.slice(0, FEED.diversifyTop), rest = list.slice(FEED.diversifyTop);
+  const out = [], seen = {};
+  while (top.length) {
+    let best = 0, bestScore = -Infinity;
+    top.forEach((x, i) => { const s = x.score - FEED.repeatPenalty * (seen[x.plan.act] || 0); if (s > bestScore) { bestScore = s; best = i; } });
+    const [x] = top.splice(best, 1);
+    seen[x.plan.act] = (seen[x.plan.act] || 0) + 1;
+    out.push(x);
+  }
+  return [...out, ...rest];
 }
 
 // ---------- search ----------
@@ -790,5 +818,5 @@ const levelFor = (pts) => [...GOODWILL_LEVELS].reverse().find((l) => pts >= l.mi
 const nextLevel = (pts) => GOODWILL_LEVELS.find((l) => l.min > pts) || null;
 
 if (typeof module !== 'undefined') {
-  module.exports = { browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
+  module.exports = { FEED, diversify, browseCollections, COLLECTIONS, searchSuggest, editDistance, guessActivity, reachForEvent, touchesBlocked, GOODWILL_LEVELS, wordRe, cap, SKILLS, DOW, startOfDay, slotOf, bucketOf, eventPhase, socialContext, scoreEvent, searchEvents, browseIndex, mapsLinks, parseIntent, parseTime, match, scoreFit, screenMessage, rankFeed, planTraits, levelFor, nextLevel, fmtSlot, fmtDay, resolveWhen, km, ACT, PLACE, PERSON };
 }

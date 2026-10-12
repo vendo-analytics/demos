@@ -800,3 +800,11 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .pin-venue b { display: block; font-size: 15px; }
 .pin-venue small { display: block; font-size: 12px; }
 .pin-panel .carousel { margin-inline: -16px; }
+.more-btn { width: 32px; height: 32px; border: 0; background: var(--card-2); }
+.more-btn svg { fill: var(--muted); stroke: none; }
+.toast-undo { background: none; border: 0; color: #64D2FF; font-weight: 700; font-size: inherit; margin-left: 6px; padding: 0; }
+.ecard { grid-template-columns: minmax(0, 1fr); }
+.ecard-body > * { min-width: 0; }
+.ecard .foot > .row:first-child { min-width: 0; overflow: hidden; white-space: nowrap; }
+.ecard .foot > .row:first-child > span { overflow: hidden; text-overflow: ellipsis; }
+.ecard .foot > .row:last-child { flex: none; }
