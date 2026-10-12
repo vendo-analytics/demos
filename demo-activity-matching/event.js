@@ -85,7 +85,9 @@ const ordinal = (n) => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 
 
 function calendarHTML(g) {
   const c = calendarLinks(g, slotOf(g, NOW), VENUE[g.venueId]);
-  return `<div class="cal-row"><span class="small muted">Add to calendar</span><a class="link-btn" href="${c.google}" target="_blank" rel="noopener">Google</a><a class="link-btn" href="data:text/calendar;charset=utf-8,${encodeURIComponent(c.ics)}" download="${esc(g.title.replace(/[^\w ]+/g, ''))}.ics">Apple / Outlook (.ics)</a></div>`;
+  // The .ics file needs a real download; the published artifact viewer doesn't allow one, so it's offered only outside it.
+  const canDownload = !(window.claude && typeof window.claude.use === 'function');
+  return `<div class="cal-row"><span class="small muted">Add to calendar</span><a class="link-btn" href="${c.google}" target="_blank" rel="noopener">Google</a><a class="link-btn" href="${c.outlook}" target="_blank" rel="noopener">Outlook</a>${canDownload ? `<a class="link-btn" href="data:text/calendar;charset=utf-8,${encodeURIComponent(c.ics)}" download="${esc(g.title.replace(/[^\w ]+/g, ''))}.ics">Apple (.ics)</a>` : ''}</div>`;
 }
 
 // The check before joining: what you're signing up for, anything that doesn't fit, and a hello for the organiser.

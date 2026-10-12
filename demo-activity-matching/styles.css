@@ -834,3 +834,5 @@ button.status { border: 0; cursor: pointer; font: inherit; }
 .person-chip .av { width: 22px; height: 22px; font-size: 10px; }
 .hist-due { display: flex; align-items: center; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 .hist-due .not-counted { margin: 0; }
+/* phone width: grids whose children hold no-wrap rows must not grow past the screen */
+.ob-dock, .ob { grid-template-columns: minmax(0, 1fr); }

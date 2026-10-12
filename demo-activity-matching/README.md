@@ -21,20 +21,21 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Ask | Type anything, or tap an example. Watch the graph fill in, and tap a node to correct it. "Picked for you" sits under the box. |
 | Matches | Groups to join, people keen right now, a suggested plan that combines individuals, and the "might be keen" reach-out. |
 | No match | "Board games in Newtown tonight": the ask is saved and passed on, with a "widen radius" option. |
-| Explore | For you (recommendations with reasons), browse rows with their rules, by day, by activity, and a Map with venue pins and "Start one here". Plans that clash with your avoid list are held back with a count. |
+| Explore | For you (recommendations with reasons; "⋯" for Not for me or Show fewer, with Undo), browse rows with their rules, by day, by activity. Plans that clash with your avoid list are held back with a count. |
+| Map | Venue pins with open-plan counts; zoom with the distance chips; a venue's plans, directions and "Start one here". |
 | Search | "padel this weekend": the query becomes removable filter chips. Try "padle" (typo), "footy" (local name), "padel 7am" (other times), "Mia" (people aren't searchable), "yoga" (no results, notify me), and the Filters button. |
-| Event page | Interested or join, directions with map links, "why you're seeing this" graph, who's going, thread preview. |
+| Event page | Interested, or Join through a short check (clash and level warnings, a hello for the organiser). Once going: add to calendar. Directions with map links, "why you're seeing this" graph, who's going, thread preview. |
 | Thread | Ask "where do we meet?" or "what do I bring?" and the organiser answers. Reply to a message. Type a phone number to see it hidden. |
-| Create event | Activity, day, time, venue, meeting point and directions, spots, level, details, approvals, who can find it, reach preview. |
+| Create event | Activity, day (today too), time, venue card with map links, meeting point and directions, spots, level, details, approvals, repeat weekly, who can find it, reach preview and a card preview. Try football, Friday, 6pm, Manly Oval: Keen shows the game already on. |
 | Host tools | A plan you host: accept a join request, edit it (everyone is told what changed), cancel it with a reason, run it again next week. |
 | Plan data | Every field on a plan with its value and allowed values. |
 | Profile data | Every field on your profile with its value and allowed values, editable with validation. |
 | Your graph | Every edge from you to activities, people, places, times, goals and avoids, weighted. Rate someone or block someone, then come back. |
 | Graph data | Every node and edge type with live counts, and how the same edges work in both directions. |
-| Check-in | A plan happening now: "I'm here" or "Running late", then confirmation and +50. |
-| Roll call | The organiser marks who came on a plan they hosted. |
-| Feedback | Rate the plan, confirm who came, tag people. A good review comes back a few seconds later. |
-| History | Every plan you went to or hosted, totals by activity, and the people you've played with. |
+| Check-in | A plan happening now: "I'm here" or "Running late", then confirmation and +50. Once checked in, "Who's here" lets you confirm Mia. |
+| Roll call | The organiser marks Came, Late or No-show. People who didn't check in must be marked before it can be confirmed. Then a summary of who came and the Goodwill given. |
+| Feedback | Rate the plan, optionally mark who came, rate and tag people ("Made me uncomfortable" offers a report). Then a summary, and the double-blind review about you it unlocks. |
+| History | Every plan you went to or hosted, by month, filterable by activity. Plans not counted yet say so, with the button that counts them. |
 | Profile | Someone else's profile: counts per activity, "played with you", trust badges. |
 
 Login, photo checks and two-way calendar sync are deliberately out of scope (adding a plan to your calendar works).

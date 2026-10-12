@@ -813,7 +813,9 @@ function calendarLinks(plan, slot, venue) {
   const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Keen//Plans//EN', 'BEGIN:VEVENT', `UID:${plan.id}@keen.app`, `DTSTAMP:${z(new Date())}`,
     `DTSTART:${z(slot.start)}`, `DTEND:${z(slot.end)}`, `SUMMARY:${esc(plan.title)}`, `LOCATION:${esc(where)}`, `DESCRIPTION:${esc(details)}`,
     'BEGIN:VALARM', 'TRIGGER:-PT2H', 'ACTION:DISPLAY', `DESCRIPTION:${esc(plan.title)}`, 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
-  return { google, ics };
+  const iso = (d) => d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const outlook = `https://outlook.live.com/calendar/0/deeplink/compose?path=/calendar/action/compose&rru=addevent&subject=${encodeURIComponent(plan.title)}&startdt=${iso(slot.start)}&enddt=${iso(slot.end)}&location=${encodeURIComponent(where)}&body=${encodeURIComponent(details)}`;
+  return { google, outlook, ics };
 }
 
 // Screen chat messages for things scammers rely on: moving off-app and talking about money.

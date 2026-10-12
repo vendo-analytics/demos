@@ -541,7 +541,8 @@ Join, Ask to join and Join waitlist each open a short sheet first, so a stray ta
 
 ### 8.2 Once you're going
 
-- **Add to calendar:** a Google Calendar link and an `.ics` file (Apple, Outlook) with a 2-hour alert. Only the title,
+- **Add to calendar:** Google and Outlook links, and an `.ics` file for Apple Calendar with a 2-hour alert (the native
+  app adds straight to the calendar instead; the published web prototype can't offer file downloads, so it shows only the links). Only the title,
   time and the venue's public address go in; the meeting point and people stay in the app.
 - A reminder 2 hours before, and check-in opens 30 minutes before (§9).
 - Leaving is in §10.

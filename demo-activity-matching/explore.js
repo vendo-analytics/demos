@@ -324,7 +324,8 @@ function mapViewHTML() {
     if (c) { c.ids.push(v.id); c.n += idx.byVenue[v.id] || 0; } else clusters.push({ x: p[0], y: p[1], ids: [v.id], n: idx.byVenue[v.id] || 0 });
   }
   const sel = S.ex.pin;
-  const labels = PLACES.filter((p) => p.name !== ME.suburb).map((p) => [p, xy(p)]).filter(([, q]) => inView(q))
+  // a suburb label under a pin is unreadable, so drop it
+  const labels = PLACES.filter((p) => p.name !== ME.suburb).map((p) => [p, xy(p)]).filter(([, q]) => inView(q) && !clusters.some((c) => Math.abs(c.x - q[0]) < 34 && Math.abs(c.y - (q[1] + 18)) < 16))
     .map(([p, [x, y]]) => `<text class="map-sub" x="${x.toFixed(1)}" y="${(y + 22).toFixed(1)}" text-anchor="middle">${esc(p.name)}</text>`).join('');
   const pins = clusters.map((c) => {
     const key = c.ids.join(',');

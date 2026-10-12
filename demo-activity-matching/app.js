@@ -799,7 +799,7 @@ const NOTES = {
       <li><b>For organisers</b>: accept or decline join requests, edit the plan, cancel it with a reason (everyone is told), take attendance, and run it again as a pre-filled copy for next week.</li>
       <li><b>Interested</b> puts you in the thread to ask questions, without taking a spot. <b>Join</b> takes a spot straight away, or asks the organiser if they confirm new people. Full plans have a waitlist.</li>
       <li>Join is two taps. The check in between shows when, where, level and spots, warns if it clashes with a plan you're going to, is well off your level, or involves something you avoid, and lets you say hi to an organiser who confirms people (screened like chat).</li>
-      <li>Once you're going: add it to Google Calendar or download an .ics for Apple or Outlook, with a 2-hour reminder. The meeting point stays in the app.</li>
+      <li>Once you're going: add it to Google or Outlook Calendar, or download an .ics for Apple Calendar (not in the published viewer, which blocks downloads). The meeting point stays in the app.</li>
       <li><b>Directions</b>: venue, address and travel tips for everyone, with links to Google and Apple Maps. The exact meeting point only shows to people in the thread.</li>
       <li><b>Why you're seeing this</b> draws the graph path from you to the plan: activity, place, time, level and people you've played with.</li>
       <li>On the day: check in when you arrive, or tell the group you're running late. Leaving within 24 hours counts as a late cancel.</li>
