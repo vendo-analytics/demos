@@ -25,7 +25,10 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Search | "padel this weekend": the query becomes removable filter chips. Try "pickleball" (similar results) or "karaoke" (no results). |
 | Event page | Interested or join, directions with map links, "why you're seeing this" graph, who's going, thread preview. |
 | Thread | Ask "where do we meet?" or "what do I bring?" and the organiser answers. Reply to a message. Type a phone number to see it hidden. |
-| Create event | Activity, day, time, venue, meeting point and directions, spots, level, details, approvals, reach preview. |
+| Create event | Activity, day, time, venue, meeting point and directions, spots, level, details, approvals, who can find it, reach preview. |
+| Host tools | A plan you host: accept a join request, edit it (everyone is told what changed), cancel it with a reason, run it again next week. |
+| Plan data | Every field on a plan with its value and allowed values. |
+| Profile data | Every field on your profile with its value and allowed values, editable with validation. |
 | Check-in | A plan happening now: "I'm here" or "Running late", then confirmation and +50. |
 | Roll call | The organiser marks who came on a plan they hosted. |
 | Feedback | Rate the plan, confirm who came, tag people. A good review comes back a few seconds later. |
@@ -33,6 +36,11 @@ current screen and "Jump to" buttons for each flow. The app opens on onboarding;
 | Profile | Someone else's profile: counts per activity, "played with you", trust badges. |
 
 Login, photo checks and calendar sync are deliberately out of scope.
+
+**Photos.** Portraits and the padel and tennis photos are AI-generated for the demo: none of them show real people.
+Other activities use gradient art in their category's colours, and people without a photo show their initials. Both
+fallbacks are part of the design, not placeholders to remove. Drop more photos into `img/acts/<activity>.jpg` and add the
+activity to `ACT_PHOTOS` in `data.js` to use them.
 
 ## Core ideas
 
@@ -216,6 +224,8 @@ demo-activity-matching/
 ├── event.js       # Event page, joining and leaving, check-in, roll call, threads, Plans tab, history
 ├── explore.js     # Explore: recommendations, browse and search
 ├── onboarding.js  # Onboarding screen, Claude and voice wiring
+├── img/           # Demo photos: people/<id>.jpg and acts/<activity>.jpg
+├── profile.js     # Profile fields, profile screens, Profile data editor
 ├── MODEL.md       # Data model and lifecycle spec
 ├── schema.sql     # Postgres schema
 └── README.md

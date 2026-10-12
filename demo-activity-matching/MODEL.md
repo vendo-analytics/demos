@@ -145,29 +145,46 @@ Newtown, Marrickville, Bondi, Bronte, Coogee, Parramatta.
 
 ## 2. Event
 
-An event (called a "plan" in the UI) is an ask made specific: a fixed start time, a public venue and spots to fill.
+An event (a "plan" in the UI) is an ask made specific: a fixed start time, a public venue and spots to fill. Every plan has
+the same fields: 12 set by the organiser and 5 worked out by Keen. In the prototype, **All plan fields** on any event page
+shows them with their values. They're driven by `EVENT_FIELDS` in `plans.js`.
 
-| Field | Type | Notes |
+### 2.1 Set by the organiser
+
+| Field | Label | Type | Required | Allowed values / validation | Example |
+| --- | --- | --- | --- | --- | --- |
+| `title` | Title | text | yes | Up to 60 characters. Prefilled as "{Weekday} {activity}". | `Friday 6-a-side` |
+| `activity_id` | Activity | ref Activity | yes | From the tag list (§1.5). Locked once someone other than the organiser's group has joined. | `football` |
+| `description` | Details | text | no | Up to 200 characters. Screened: no contact details or payment talk. Shouldn't restate live numbers like "one spot left"; the app shows those. | `Bibs and ball sorted. Mixed, all levels.` |
+| `level` | Level | enum | yes | Beginner, Casual, Intermediate, Competitive (§1.5). Defaults to the organiser's level for that activity. | `casual` |
+| `venue_id` | Venue | ref Venue | yes | A public venue that lists this activity, nearest first. Never a home. | `manly-oval` |
+| `meeting_point` | Meeting point | text | yes | Up to 80 characters. Prefilled from the venue's default. Only people in the thread see it. | `North end, by the nets` |
+| `directions` | Getting there | text | no | Up to 300 characters. Prefilled with the venue's transport and parking notes. | `Ferry to Manly Wharf, then a 10 minute walk…` |
+| `bring` | What to bring | text | no | Up to 80 characters. | `Boots or runners, water` |
+| `starts_at`, `ends_at` | When | timestamptz | yes | Starts at least 1 hour from now and within 60 days. Lasts 1, 1.5, 2 or 3 hours. | `Fri 16 Oct, 6–7:30pm` |
+| `capacity` | Spots | int | yes | 2–30, including the organiser and anyone they bring (`group_size`, 1–4). Can't go below the number already going. Over 6 needs ID or the Regular level. | `11` |
+| `join_mode` | Joining | enum | yes | `approve` (organiser confirms, the default) or `open` (join straight away). | `approve` |
+| `visibility` | Who can find it | enum | yes | `public` (Explore, search and suggestions within each person's radius) or `invite` (only people the organiser invites). | `public` |
+
+### 2.2 Worked out by Keen
+
+| Field | Rule | Example |
 | --- | --- | --- |
-| `id` | uuid | |
-| `organiser_id` | ref User | |
-| `activity_id` | ref Activity | From the fixed tag list. |
-| `title` | text, 60 | |
-| `description` | text, 200 | Screened (§7). |
-| `level` | enum | Same four levels as profiles. |
-| `venue_id` | ref Venue | Public places only, never a home. |
-| `meeting_point` | text, 80 | Prefilled from the venue. Only shown to people in the thread (§13). |
-| `directions` | text, 300 | How to get there: transport, parking, access. Prefilled from the venue. |
-| `bring` | text, 80 | What to bring. Optional. |
-| `starts_at`, `ends_at` | timestamptz | Stored with the venue's timezone. |
-| `capacity` | int | Total spots, including the organiser's own group. |
-| `join_mode` | enum | `approve` (organiser confirms, the default) or `open` (join straight away). |
-| `visibility` | enum | `public` (Explore and search) or `invite` (only people sent it). |
-| `status` | enum | `open` → `full` → `live` → `done`, or `cancelled`. `live` starts 30 minutes before `starts_at`. |
-| `traits[]` | enum, derived | From the activity, the venue and the time: water, heights, contact, alcohol (licensed venue), late (ends after 10pm), early (starts before 7am), big (8 or more). Matched against people's avoid lists. |
-| `created_from_ask_id` | ref Ask | When posted from an ask. |
-| `cloned_from_event_id` | ref Event | For "run it again". |
-| `cancelled_reason` | text | |
+| `status` | `open` → `full` (no spots) → `live` (from 30 minutes before the start) → `done` (after the end). `cancelled` is the only status a person sets. | `open` |
+| `going`, `interested`, `waitlist`, `spots_left` | Counted from memberships (below). | `4 going · 2 interested · 7 left` |
+| `traits` | From the activity (water, heights, contact), the venue (licensed → alcohol) and the time (late if it ends after 10pm, early if it starts before 7am, big if capacity ≥ 8). Matched against avoid lists. | `contact, big` |
+| `time_bucket` | `wd-am`, `wd-pm`, `we-am` or `we-pm` from the start time. Matched against availability. | `wd-pm` |
+| `organiser_id` | Whoever created it. Also: `created_at`, `created_from_ask_id`, `cloned_from_event_id` (for "run it again"). | – |
+
+### 2.3 What the organiser can do after posting
+
+- **Edit** any field above, except the activity once others have joined; capacity can't drop below the number going.
+  Everyone in the thread gets one message listing what changed ("Sam changed the time to Fri 6pm, the venue to Clontarf Reserve").
+- **Cancel** with a reason: bad weather, not enough people, venue not available, or something came up. Everyone going or
+  interested is told. Cancelling under 24 hours before the start counts as a late cancel.
+- **Accept or decline join requests**, seeing each person's level for the activity, plans attended and no-shows.
+- **Take attendance** from 30 minutes before the start (§9).
+- **Run it again**: a pre-filled copy for the same weekday next week, posted as a new plan with `cloned_from_event_id`.
 
 **Venue:** `id`, `name`, `suburb_id`, `address`, `location` (point), `activities[]`, `licensed`, `default_meeting_point`,
 `transport`, `parking`, `accessibility`, `verified_public`. Venues come from a curated list. Clubs and councils can propose

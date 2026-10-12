@@ -33,7 +33,7 @@ const S = {
   ex: { q: '', act: null, day: null, drop: {} },
   hidden: new Set(),
   myAsks: MY_ASKS.map((a) => ({ ...a })),
-  myPlans: [],
+  myPlans: [...MY_HOSTED],
   points: 0, // set from the ledger at start-up
   idVerified: false,
   ledger: [],
@@ -73,7 +73,8 @@ const ART = {
 function actArt(actId) {
   const a = ACT[actId];
   const [g1, g2] = ART[a.cat] || ART.service;
-  return `<div class="art" style="--g1:${g1};--g2:${g2}"><span class="art-word" aria-hidden="true">${esc(a.label)}</span><img src="img/acts/${actId}.jpg" alt="" loading="lazy" data-fallback></div>`;
+  const photo = ACT_PHOTOS.includes(actId) ? `<img src="img/acts/${actId}.jpg" alt="" loading="lazy" data-fallback>` : '';
+  return `<div class="art${photo ? ' has-photo' : ''}" style="--g1:${g1};--g2:${g2}"><span class="art-word" aria-hidden="true">${esc(a.label)}</span>${photo}</div>`;
 }
 const gw = (pts) => { const l = levelFor(pts); return `<span class="gw ${l.key}" title="${l.name}">${fmtPts(pts)}</span>`; };
 const personPts = (p) => (p.id === 'me' ? S.points : p.points);
@@ -522,6 +523,7 @@ const ACTIONS = {
   },
   again: (v) => {
     const g = findPlan(v);
+    if (g.org === 'me') { startClone(v); return; }
     toast(`Sent to the ${g.members.length - 1} people who came. It's on once 6 say yes.`);
   },
   report: (v) => reportSheet(v),
@@ -642,8 +644,10 @@ const NOTES = {
     </ul>`,
   },
   compose: {
-    title: 'Creating a plan',
+    title: 'Creating and editing a plan',
     body: `<ul>
+      <li>The same screen edits a plan you host. Everything can change except the activity once someone else has joined, and spots can't drop below the number going. Everyone in the plan gets a thread message listing what changed.</li>
+      <li><b>Who can find it</b>: anyone nearby (Explore, search and suggestions) or only people you invite.</li>
       <li>Start from an ask ("Post as a plan"), from Explore or from the Plans tab. Starting fresh asks for the activity first.</li>
       <li><b>Directions</b>: picking a venue fills in the meeting point and how to get there (transport and parking), and both can be edited. The address links to a map.</li>
       <li>A plan is an ask made specific: a fixed start time, a public venue and spots to fill. Typing "Football Friday 6pm at Manly Oval, we're 4, need 7" offers this flow first.</li>
@@ -686,6 +690,16 @@ const NOTES = {
       <li>"Invite" only appears when there's something to invite them to: your ask (coming from matches) or a plan you're hosting.</li>
     </ul>`,
   },
+  planData: {
+    title: 'Plan fields',
+    body: `<ul>
+      <li>Every plan has the same 17 fields. 12 are set by the organiser; 5 are worked out by Keen from people, time and place.</li>
+      <li><b>Status</b> is mostly calculated: Open and Full come from spots, Happening now starts 30 minutes before, Finished after the end. Only <b>Cancelled</b> is set by a person.</li>
+      <li><b>Traits</b> (licensed venue, water, late finish, big group…) are derived and matched against people's private avoid lists. Organisers never tag them by hand.</li>
+      <li>Descriptions shouldn't repeat live numbers like "one spot left". The app shows those, and a typed number goes stale as soon as someone joins.</li>
+      <li>MODEL.md §2 has the same list with types, validation and examples.</li>
+    </ul>`,
+  },
   profileData: {
     title: 'Profile fields',
     body: `<ul>
@@ -700,6 +714,7 @@ const NOTES = {
   plan: {
     title: 'The event page',
     body: `<ul>
+      <li><b>For organisers</b>: accept or decline join requests, edit the plan, cancel it with a reason (everyone is told), take attendance, and run it again as a pre-filled copy for next week.</li>
       <li><b>Interested</b> puts you in the thread to ask questions, without taking a spot. <b>Join</b> takes a spot straight away, or asks the organiser if they confirm new people. Full plans have a waitlist.</li>
       <li><b>Directions</b>: venue, address and travel tips for everyone, with links to Google and Apple Maps. The exact meeting point only shows to people in the thread.</li>
       <li><b>Why you're seeing this</b> draws the graph path from you to the plan: activity, place, time, level and people you've played with.</li>
@@ -756,6 +771,8 @@ const FLOWS = [
   ['Event page', () => { S.tab = 'explore'; S.stack = [{ name: 'plan', v: 'g1' }]; render(); }, (n) => n === 'plan'],
   ['Thread', () => { if (!myStatus(findPlan('g1'))) ACTIONS.interest('g1'); S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'g1' }, { name: 'thread', v: 'g1' }]; render(); }, (n) => n === 'thread'],
   ['Create event', () => { S.tab = 'activity'; S.stack = []; startComposeBlank(); }, (n) => n === 'compose'],
+  ['Host tools', () => { S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'mine0' }]; render(); }, () => false],
+  ['Plan data', () => { S.tab = 'explore'; S.stack = [{ name: 'plan', v: 'g1' }, { name: 'planData', v: 'g1' }]; render(); }, (n) => n === 'planData'],
   ['Check-in', () => { S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'live1' }]; render(); }, () => false],
   ['Roll call', () => { S.tab = 'activity'; S.stack = [{ name: 'plan', v: 'h0' }]; if (findPlan('h0').needsRollcall) S.stack.push({ name: 'rollcall', v: 'h0' }); render(); }, (n) => n === 'rollcall'],
   ['Feedback', () => { S.fb = null; S.tab = 'activity'; S.stack = [{ name: 'feedback', v: 'past1' }]; render(); }, (n) => n === 'feedback'],

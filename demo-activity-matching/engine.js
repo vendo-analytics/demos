@@ -463,7 +463,7 @@ function rankFeed(profile, plans, opts = {}) {
   const radius = profile.radius || 10;
   const shown = [], hidden = [];
   for (const plan of plans) {
-    if (plan.past || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id))) continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || plan.members.includes('me') || (opts.exclude && opts.exclude.has(plan.id))) continue;
     if (eventPhase(plan, now) === 'done') continue;
     const item = scoreEvent(profile, plan, ctx, now);
     if (item.dist > radius) continue;
@@ -489,7 +489,7 @@ function searchEvents(text, profile, plans, opts = {}) {
   const centre = PLACE[place || profile.suburb] || PLACE[ME.suburb];
   const exact = [], similar = [], hidden = [];
   for (const plan of plans) {
-    if (plan.past || eventPhase(plan, now) === 'done') continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done') continue;
     const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
     if (km(centre, venue || PLACE[plan.place]) > radius) continue;
     const slot = slotOf(plan, now);
@@ -515,7 +515,7 @@ function browseIndex(profile, plans, now = new Date()) {
   const byAct = {}, byDay = {};
   const home = PLACE[profile.suburb] || PLACE[ME.suburb];
   for (const plan of plans) {
-    if (plan.past || eventPhase(plan, now) === 'done') continue;
+    if (plan.past || plan.status === 'cancelled' || plan.visibility === 'invite' || eventPhase(plan, now) === 'done') continue;
     const venue = typeof VENUE !== 'undefined' && VENUE[plan.venueId];
     if (km(home, venue || PLACE[plan.place]) > (profile.radius || 10)) continue;
     byAct[plan.act] = (byAct[plan.act] || 0) + 1;

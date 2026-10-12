@@ -34,10 +34,10 @@ VIEWS.plan = ({ v: id }) => {
   const g = findPlan(id);
   const org = PERSON[g.org];
   const slot = slotOf(g, NOW);
-  const phase = g.past ? 'done' : eventPhase(g, NOW);
+  const phase = g.status === 'cancelled' ? 'cancelled' : g.past ? 'done' : eventPhase(g, NOW);
   const st = myStatus(g);
   const left = g.size - g.members.length;
-  const pill = phase === 'done' ? 'Finished' : phase === 'live' ? 'Happening now' : left <= 0 ? 'Full' : `${left} spot${left === 1 ? '' : 's'} left`;
+  const pill = phase === 'cancelled' ? 'Cancelled' : phase === 'done' ? 'Finished' : phase === 'live' ? 'Happening now' : left <= 0 ? 'Full' : `${left} spot${left === 1 ? '' : 's'} left`;
   return bar(esc(g.title), true, '', { over: true }) + `
   <div class="hero-media">${actArt(g.act)}<div class="hero-shade"></div>
     <div class="hero-text">
@@ -58,24 +58,28 @@ VIEWS.plan = ({ v: id }) => {
     </div>
     ${g.note ? `<p class="quote">${esc(g.note)}</p>` : ''}
     ${directionsHTML(g)}
-    ${phase !== 'done' && g.org !== 'me' ? whyHTML(g) : ''}
+    ${!['done', 'cancelled'].includes(phase) && g.org !== 'me' ? whyHTML(g) : ''}
     ${threadCardHTML(g)}
     ${peopleHTML(g, phase)}
     <div class="notice info"><b>Safe by default</b>Public venue only. The meeting point shows once you're in. Chat stays in Keen, and phone numbers, links and payment talk are hidden until you've met once.</div>
-    <button type="button" class="link-btn" data-act="report" data-v="${g.org === 'me' ? g.members.find((m) => m !== 'me') || 'p1' : g.org}" style="justify-self:center;color:var(--flag)">Report this plan</button>
+    <div class="row" style="justify-content:center;gap:18px"><button type="button" class="link-btn" data-act="plan-data" data-v="${g.id}">All plan fields</button>${g.org !== 'me' ? `<button type="button" class="link-btn" data-act="report" data-v="${g.org}" style="color:var(--flag)">Report this plan</button>` : ''}</div>
   </div>`;
 };
 
 function actionHTML(g, st, phase) {
   const id = g.id, org = PERSON[g.org];
   const left = g.size - g.members.length;
+  if (phase === 'cancelled') {
+    return `<div class="notice bad"><b>Cancelled${g.org === 'me' ? ' by you' : ` by ${esc(org.name)}`}</b>${esc(g.cancelReason || 'The organiser cancelled this plan.')} Everyone going or interested was told.</div>
+      ${g.org === 'me' ? `<button type="button" class="btn block ghost" data-act="again" data-v="${id}">Set it up again for another day</button>` : ''}`;
+  }
   if (st === 'hosting') {
     if (g.past || phase === 'done') {
       return g.needsRollcall
         ? `<div class="card"><div class="h3">Take attendance</div><p class="small muted" style="margin:0">Mark who came. It's what earns everyone Goodwill, and it closes the plan.</p><button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button></div>`
         : `<div class="notice info"><b>Attendance taken</b>${plural(g.members.length, 'person')} came. Thanks for organising.</div><button type="button" class="btn block ghost" data-act="again" data-v="${id}">Run it again next week</button>`;
     }
-    return `${requestsHTML(g)}${phase === 'live' ? `<button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button>` : ''}
+    return `${requestsHTML(g)}${phase === 'live' ? `<button type="button" class="btn block" data-act="rollcall" data-v="${id}">Take attendance</button>` : `<div class="btn-pair"><button type="button" class="btn ghost" data-act="edit-plan" data-v="${id}">Edit plan</button><button type="button" class="btn ghost" data-act="cancel-plan" data-v="${id}">Cancel plan</button></div>`}
       ${g.sent != null ? `<div class="card"><p class="eyebrow">Your plan so far</p>${funnelHTML(g)}<p class="small muted" style="margin:0">Sent to ${plural(g.sent, 'person')} who fit, and showing in Explore within ${ME.radius || 10} km. Everyone gets a reminder 2 hours before.</p></div>` : ''}`;
   }
   if (phase === 'done') {
@@ -293,6 +297,7 @@ function threadsList() {
 }
 
 function eventRow(g, statusText, statusClass = 'wait') {
+  if (g.status === 'cancelled') { statusText = 'Cancelled'; statusClass = 'due'; }
   return `<article class="card tap" data-act="plan" data-v="${g.id}">
     <div class="event-row"><div class="thumb">${actArt(g.act)}</div><div class="grow" style="min-width:0"><div class="name ellipsis">${esc(g.title)}</div><div class="muted small ellipsis">${esc(fmtSlot(slotOf(g, NOW), NOW))} · ${esc(g.venue)}</div>
       <div class="row" style="margin-top:6px"><span class="status ${statusClass}">${statusText}</span>${unread(g.id) && inThread(g) ? `<span class="count-badge">${unread(g.id)} new</span>` : ''}</div></div></div>
@@ -477,6 +482,28 @@ Object.assign(ACTIONS, {
     render(true);
   },
   rollcall: (v) => { S.rc = null; go('rollcall', v); },
+  'cancel-plan': (v) => {
+    const g = findPlan(v);
+    const people = new Set([...g.members, ...(g.interested || [])].filter((m) => m !== 'me')).size;
+    sheet(`<div class="h3">Cancel "${esc(g.title)}"?</div>
+      <p class="small" style="margin:0">${plural(people, 'person')} going or interested will get a message straight away. Cancelling less than 24 hours before the start counts as a late cancel.</p>
+      <p class="eyebrow">Why?</p>
+      <div class="chips">${['Bad weather', 'Not enough people', 'Venue not available', 'Something came up'].map((r) => `<button type="button" class="chip" data-act="cancel-pick" data-v="${r}">${r}</button>`).join('')}</div>
+      <button type="button" class="btn block" data-act="cancel-confirm" data-v="${v}">Cancel the plan</button>
+      <button type="button" class="btn block ghost" data-act="close-sheet">Keep it</button>`);
+  },
+  'cancel-pick': (v, el) => { document.querySelectorAll('[data-act="cancel-pick"]').forEach((b) => b.setAttribute('aria-pressed', String(b === el))); S.cancelReason = v; },
+  'cancel-confirm': (v) => {
+    const g = findPlan(v);
+    g.status = 'cancelled';
+    g.cancelReason = S.cancelReason ? `${S.cancelReason}.` : '';
+    S.cancelReason = null;
+    postSys(v, `${ME.name} cancelled the plan${g.cancelReason ? `: ${g.cancelReason.toLowerCase().replace(/\.$/, '')}` : ''}`);
+    closeSheet();
+    updateBadge();
+    render(true);
+    toast('Plan cancelled. Everyone in it has been told.');
+  },
   rc: (v) => { const [pid, c] = v.split(':'); S.rc.came[pid] = c === '1'; render(true); },
   'rc-confirm': (v) => {
     const g = findPlan(v);

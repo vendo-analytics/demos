@@ -91,7 +91,7 @@ function posterHTML(p, opts = {}) {
   const together = self ? 0 : ctxNow().played[p.id] || 0;
   return `<div class="poster${opts.card ? ' card-like' : ''}" style="--h:${p.hue}">
     <span class="poster-i" aria-hidden="true">${esc(p.name[0])}</span>
-    ${p.photo ? `<img src="img/people/${p.id}.jpg" alt="${esc(p.name)}" data-fallback>` : ''}
+    ${p.photo ? `<img class="poster-bg" src="img/people/${p.id}.jpg" alt="" data-fallback><img class="poster-face" src="img/people/${p.id}.jpg" alt="${esc(p.name)}" data-fallback>` : ''}
     <div class="poster-shade"></div>
     <div class="poster-text">
       <h1>${esc(p.name)}</h1>

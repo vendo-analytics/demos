@@ -704,3 +704,11 @@ body { font-size: 15px; letter-spacing: -0.01em; -webkit-font-smoothing: antiali
 .phone:not(.no-tabs) .sticky-cta { bottom: 70px; }
 .btn.sm { white-space: nowrap; }
 .thumb .art-word, .tile-grid .art-word, .act-row .art-word { display: none; }
+
+/* poster with a photo: the photo blurred as a backdrop, the face sharp in a circle (works with small source images) */
+.poster img.poster-bg { position: absolute; inset: -40px; width: calc(100% + 80px); height: calc(100% + 80px); object-fit: cover; filter: blur(26px) saturate(1.35) brightness(0.92); z-index: 1; }
+.poster img.poster-face { position: absolute; z-index: 3; top: 54px; left: 50%; width: 148px; height: 148px; margin-left: -74px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 4px rgb(255 255 255 / 0.55), 0 18px 40px rgb(0 0 0 / 0.35); }
+.poster.card-like img.poster-face { top: 30px; width: 124px; height: 124px; margin-left: -62px; }
+.poster:has(.poster-face) .poster-i { display: none; }
+.poster:has(.poster-face) .poster-shade { background: linear-gradient(to bottom, transparent 45%, rgb(0 0 0 / 0.55) 100%); }
+.art.has-photo .art-word, .art.has-photo::after { display: none; }

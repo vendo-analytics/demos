@@ -171,6 +171,9 @@ const FRIEND_ROWS = [
   ['f3', 'Tim', 'Balgowlah', 120, 'Jun 2026', false, 'football:intermediate', 'fitness', 'Goalkeeper by default.', 6, 0, null, 0],
 ];
 
+// Activities with a photo in img/acts/. The rest use gradient art in the activity's colours.
+const ACT_PHOTOS = ['padel', 'tennis'];
+
 // People who haven't added a photo yet. Their initials are shown instead.
 const NO_PHOTO = ['p25', 'p28', 'f3'];
 
@@ -246,16 +249,16 @@ const OPEN_ASKS = [
 // last week's weekday ('-fri'), or 'now' with hours relative to the current time.
 // `approve: false` means anyone can join straight away; otherwise the organiser confirms.
 const PLANS = [
-  { id: 'g1', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['fri', 18, 19.5], members: ['p4', 'p7', 'p9', 'p12'], interested: ['p13', 'p18'], size: 11, skill: 'casual', note: 'Bibs and ball sorted. Looking for 7 more.', bring: 'Boots or runners, water' },
-  { id: 'g2', org: 'p23', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['sun', 8, 10], members: ['p23', 'p24'], interested: ['p5'], size: 4, skill: 'casual', note: 'Court booked. Need two more for doubles.', bring: 'Racquet (spares available), water' },
+  { id: 'g1', org: 'p4', act: 'football', title: 'Friday 6-a-side', venueId: 'manly-oval', when: ['fri', 18, 19.5], members: ['p4', 'p7', 'p9', 'p12'], interested: ['p13', 'p18'], size: 11, skill: 'casual', note: 'Bibs and ball sorted. Mixed, all levels, no slide tackles.', bring: 'Boots or runners, water' },
+  { id: 'g2', org: 'p23', act: 'padel', title: 'Sunday social padel', venueId: 'manly-padel', when: ['sun', 8, 10], members: ['p23', 'p24'], interested: ['p5'], size: 4, skill: 'casual', note: 'Court booked. Doubles, rotating partners each set.', bring: 'Racquet (spares available), water' },
   { id: 'g3', org: 'p6', act: 'surfing', title: 'Learn-to-surf meetup', venueId: 'south-steyne', when: ['sat', 7, 9], members: ['p6', 'p25'], interested: ['p8'], size: 6, skill: 'beginner', note: 'Bring a soft-top if you have one. I have two spares.', bring: 'Wetsuit or rashie, sunscreen' },
   { id: 'g4', org: 'p30', act: 'volleyball', title: 'Bondi beach volley', venueId: 'bondi-nets', when: ['sun', 14, 17], members: ['p30'], interested: [], size: 4, skill: 'intermediate', note: 'Net is up from 2pm.' },
-  { id: 'g5', org: 'p29', act: 'padel', title: 'Saturday padel ladder', venueId: 'freshwater-courts', when: ['sat', 8, 10], members: ['p29', 'p26', 'p28'], interested: [], size: 4, skill: 'casual', note: 'One spot left.' },
+  { id: 'g5', org: 'p29', act: 'padel', title: 'Saturday padel ladder', venueId: 'freshwater-courts', when: ['sat', 8, 10], members: ['p29', 'p26', 'p28'], interested: [], size: 4, skill: 'casual', note: 'Ladder format: win and move up a court.' },
   { id: 'g6', org: 'p10', act: 'running', title: 'Sunrise run', venueId: 'manly-wharf', when: ['sat', 6, 7], members: ['p10', 'p22', 'p11'], interested: ['p26'], size: 12, skill: 'casual', note: '6 km, no one gets left behind.', approve: false },
   { id: 'g7', org: 'p16', act: 'boardgames', title: 'Trivia and board games', venueId: 'wharf-bar', when: ['+2', 19, 22], members: ['p16', 'p29', 'p27'], interested: [], size: 8, skill: 'casual', note: 'Teams of four. Bring your worst general knowledge.' },
   { id: 'g8', org: 'p10', act: 'swimming', title: 'Shelly Beach swim', venueId: 'shelly-beach', when: ['sun', 7.5, 8.5], members: ['p10', 'p4'], interested: [], size: 8, skill: 'intermediate', note: 'Out to the buoy and back. Wetsuits optional.' },
   { id: 'g9', org: 'p27', act: 'language', title: 'Spanish over coffee', venueId: 'corso-cafe', when: ['wed', 7.5, 8.5], members: ['p27', 'p18'], interested: [], size: 6, skill: 'beginner', note: 'Half Spanish, half English. All levels.', approve: false },
-  { id: 'g10', org: 'p15', act: 'tennis', title: 'Social doubles', venueId: 'clontarf', meet: 'Tennis courts at the east end', when: ['sun', 9, 11], members: ['p15', 'p3', 'p20'], interested: [], size: 4, skill: 'intermediate', note: 'One spot. We rotate partners every set.' },
+  { id: 'g10', org: 'p15', act: 'tennis', title: 'Social doubles', venueId: 'clontarf', meet: 'Tennis courts at the east end', when: ['sun', 9, 11], members: ['p15', 'p3', 'p20'], interested: [], size: 4, skill: 'intermediate', note: 'We rotate partners every set.' },
   { id: 'g11', org: 'p19', act: 'climbing', title: 'Sunset bouldering', venueId: 'marrickville-gym', when: ['thu', 18, 20.5], members: ['p19'], interested: [], size: 4, skill: 'intermediate', note: 'Shoes for hire at the desk.' },
   { id: 'g12', org: 'p22', act: 'hiking', title: 'Manly Dam loop', venueId: 'manly-dam', when: ['sun', 8, 11], members: ['p22', 'p17'], interested: [], size: 8, skill: 'casual', note: 'Slow pace, snack stop halfway.', approve: false },
   { id: 'g13', org: 'p23', act: 'padel', title: 'Beginner padel clinic', venueId: 'manly-padel', when: ['+1', 18, 19.5], members: ['p23', 'p5'], interested: ['p28'], size: 6, skill: 'beginner', note: 'Rules, serves and a few games. Racquets to borrow.', approve: false, bring: 'Runners and water' },
@@ -266,6 +269,11 @@ const PLANS = [
   { id: 'g18', org: 'p13', act: 'volleyball', title: 'Dee Why beach volley', venueId: 'deewhy-nets', when: ['sat', 15, 17], members: ['p13', 'p14'], interested: [], size: 8, skill: 'casual', note: 'Two nets, rotating teams.' },
   // Happening right now, and the user is going: used to demo check-in.
   { id: 'live1', org: 'p23', act: 'padel', title: 'Padel doubles', venueId: 'manly-padel', when: ['now', -0.25, 1.25], members: ['p23', 'p1', 'p24', 'me'], interested: [], size: 4, skill: 'casual', note: 'Courts are lit. Two sets then swap partners.' },
+];
+
+// An upcoming plan the user hosts, with someone waiting to be accepted. Used to demo the organiser's tools.
+const MY_HOSTED = [
+  { id: 'mine0', org: 'me', act: 'padel', title: 'Thursday sunrise padel', venueId: 'manly-padel', when: ['thu', 6.5, 8], members: ['me', 'p1', 'p27'], interested: ['p5'], requests: ['p28'], size: 4, skill: 'casual', note: 'Two sets before work, then coffee on the Corso.', bring: 'Racquet and water', approve: true, mine: true, posted: true, sent: 9, seen: 6, keen: 3, passed: 1 },
 ];
 
 // A plan the user went to last week. It is waiting for their feedback.
@@ -296,6 +304,11 @@ const MY_ASKS = [
 
 // Message threads, one per event. `ago` is minutes before now; `reply` is the index of the quoted message.
 const SEED_CHAT = {
+  mine0: [
+    { sys: true, text: 'Plan posted. People who are interested or going can chat here.', ago: 2900 },
+    { who: 'p1', text: "In! I'll bring a spare racquet.", ago: 2000 },
+    { who: 'p27', text: 'Is 6:30 sharp? Ferry gets in at 6:25.', ago: 300 },
+  ],
   g1: [
     { who: 'p4', text: 'Bibs and a ball sorted. Meet at the north end by the nets.', ago: 180 },
     { who: 'p9', text: 'I can bring cones.', ago: 150 },
@@ -325,7 +338,7 @@ const SEED_CHAT = {
 };
 
 // Fill in venue details on every event so screens can read them directly.
-for (const g of [...PLANS, ...PAST_PLANS, ...HISTORY]) {
+for (const g of [...PLANS, ...MY_HOSTED, ...PAST_PLANS, ...HISTORY]) {
   const v = VENUE[g.venueId];
   g.venue = v.name;
   g.place = v.suburb;
@@ -333,8 +346,11 @@ for (const g of [...PLANS, ...PAST_PLANS, ...HISTORY]) {
   g.meet = g.meet || v.meet;
   g.directions = g.directions || [v.transport, v.parking].filter(Boolean).join(' ');
   if (g.approve === undefined) g.approve = true;
+  g.status = g.status || 'open';           // open | cancelled (full, live and done are worked out from people and time)
+  g.visibility = g.visibility || 'public'; // public | invite
+  g.bring = g.bring || '';
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { CATEGORIES, ACTIVITIES, SKILL_LEVELS, POSITIVE_TAGS, NEGATIVE_TAGS, GOODWILL_RULES, AVOIDS, GOALS, AVAILABILITY, VENUES, VENUE, FRIENDS, PLACES, ME, PEOPLE, OPEN_ASKS, PLANS, PAST_PLANS, HISTORY, FEEDBACK_ABOUT_ME, MY_ASKS, SEED_CHAT };
+  module.exports = { MY_HOSTED, ACT_PHOTOS, CATEGORIES, ACTIVITIES, SKILL_LEVELS, POSITIVE_TAGS, NEGATIVE_TAGS, GOODWILL_RULES, AVOIDS, GOALS, AVAILABILITY, VENUES, VENUE, FRIENDS, PLACES, ME, PEOPLE, OPEN_ASKS, PLANS, PAST_PLANS, HISTORY, FEEDBACK_ABOUT_ME, MY_ASKS, SEED_CHAT };
 }

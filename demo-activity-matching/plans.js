@@ -14,8 +14,26 @@ function blankDraft() {
   return {
     act: null, raw: '', days, day: null, window: [7, 21], start: null, dur: 1.5, venues: [], venueId: null, placeName: ME.suburb,
     have: 1, seek: 3, skill: 'casual', note: '', bring: '', meet: '', meetEdited: false, directions: '', dirEdited: false,
-    approve: true, title: '', titleEdited: false,
+    approve: true, visibility: 'public', title: '', titleEdited: false, editingId: null,
   };
+}
+
+// Edit a plan you host. Everything is editable except the activity once someone else has joined.
+function startEdit(id) {
+  const g = findPlan(id);
+  const slot = slotOf(g, NOW);
+  const d = blankDraft();
+  const day = +startOfDay(slot.start);
+  const mine = g.members.filter((m) => m === 'me' || FRIENDS.some((f) => f.id === m)).length;
+  Object.assign(d, {
+    editingId: id, act: g.act, title: g.title, titleEdited: true, raw: '',
+    days: [...new Set([day, ...d.days])].sort((a, b) => a - b), day, start: hourOf(slot.start), dur: (slot.end - slot.start) / 36e5,
+    venues: [...new Set([g.venueId, ...venuesFor(g.act, g.place)])], venueId: g.venueId,
+    meet: g.meet, meetEdited: true, directions: g.directions, dirEdited: true, bring: g.bring || '', note: g.note || '',
+    have: mine, seek: g.size - mine, skill: g.skill, approve: g.approve, visibility: g.visibility || 'public',
+  });
+  S.draft = d;
+  go('compose');
 }
 
 function startComposeBlank() { S.draft = blankDraft(); go('compose'); }
@@ -79,6 +97,7 @@ function draftCheck(d) {
   else if (!d.title.trim()) why = 'Give it a title';
   else if (scan.hits.length) why = 'Fix the text to post';
   else if (sizeBlocked) why = 'Verify ID to post a plan this big';
+  else if (d.editingId && size < findPlan(d.editingId).members.length) why = `${findPlan(d.editingId).members.length} are already going`;
   return { ok: !why, why, scan, size, sizeBlocked };
 }
 
@@ -90,7 +109,7 @@ function noteWarnHTML(scan) {
 
 function publishBtnHTML() {
   const c = draftCheck(S.draft);
-  return `<button type="button" class="btn block" id="publishBtn" data-act="publish" ${c.ok ? '' : 'disabled'}>${c.ok ? 'Post plan' : c.why}</button>`;
+  return `<button type="button" class="btn block" id="publishBtn" data-act="publish" ${c.ok ? '' : 'disabled'}>${c.ok ? (S.draft.editingId ? 'Save changes' : 'Post plan') : c.why}</button>`;
 }
 
 // Typing into the text fields updates the warnings and the button without re-rendering (keeps focus).
@@ -127,8 +146,10 @@ VIEWS.compose = () => {
   if (d.start != null && !times.includes(d.start)) times = [...times, d.start].sort((a, b) => a - b);
   if (!times.length) times = START_TIMES;
   const stepper = (k, label) => `<div class="stepper"><span>${label}</span><span class="ctl"><button type="button" class="icon-btn" data-act="d-party" data-v="${k}:-1" aria-label="Fewer">−</button><b>${d[k]}</b><button type="button" class="icon-btn" data-act="d-party" data-v="${k}:1" aria-label="More">+</button></span></div>`;
-  return bar('Create a plan') + `<div class="pad">
-    <div><div class="row"><p class="eyebrow grow">${esc(act.label)} · new plan</p><button type="button" class="link-btn" data-act="d-act" data-v="">Change</button></div>
+  const editing = d.editingId ? findPlan(d.editingId) : null;
+  const othersIn = editing ? editing.members.filter((m) => m !== 'me' && !FRIENDS.some((f) => f.id === m)).length : 0;
+  return bar(editing ? 'Edit plan' : 'Create a plan') + `<div class="pad">
+    <div><div class="row"><p class="eyebrow grow">${esc(act.label)} · ${editing ? 'editing' : 'new plan'}</p>${othersIn ? '' : '<button type="button" class="link-btn" data-act="d-act" data-v="">Change</button>'}</div>
       <input id="draftTitle" class="title-input" value="${esc(d.title)}" maxlength="60" aria-label="Plan title"></div>
     <section class="field"><h3 class="h3">Day</h3><div class="chips">${d.days.map((x) => `<button type="button" class="chip" data-act="d-day" data-v="${x}" aria-pressed="${d.day === x}">${esc(fmtDay(new Date(x), NOW))}</button>`).join('')}</div></section>
     <section class="field"><h3 class="h3">Starts</h3><div class="chips">${times.map((h) => `<button type="button" class="chip num" data-act="d-start" data-v="${h}" aria-pressed="${d.start === h}">${fmtHourLabel(h)}</button>`).join('')}</div>
@@ -147,13 +168,97 @@ VIEWS.compose = () => {
       <label class="eyebrow" for="draftBring">What to bring</label><input id="draftBring" class="text-input" value="${esc(d.bring)}" maxlength="80" placeholder="e.g. Racquet and water">
       <div id="noteWarn">${noteWarnHTML(c.scan)}</div></section>
     <label class="toggle"><input type="checkbox" id="draftApprove" data-act="d-approve" ${d.approve ? 'checked' : ''}>I confirm who joins</label>
-    <div class="card"><p class="eyebrow">When you post</p><div class="ledger">
+    <section class="field"><h3 class="h3">Who can find it</h3><span class="seg"><button type="button" data-act="d-vis" data-v="public" aria-pressed="${d.visibility === 'public'}">Anyone nearby</button><button type="button" data-act="d-vis" data-v="invite" aria-pressed="${d.visibility === 'invite'}">Only people I invite</button></span></section>
+    ${editing ? `<p class="small muted" style="margin:0">Everyone going or interested gets a message in the thread listing what changed.</p>` : `<div class="card"><p class="eyebrow">When you post</p><div class="ledger">
       <div><span>People with a matching ask, told now</span><b class="num">${reach.people.length}</b></div>
       <div><span>People who might be keen, within their 3-a-week cap</span><b class="num">${reach.passive.length}</b></div>
-      <div><span>Shown in Explore and search within</span><b class="num">${ME.radius || 10} km</b></div>
-    </div></div>
+      <div><span>Shown in Explore and search within</span><b class="num">${d.visibility === 'invite' ? '–' : `${ME.radius || 10} km`}</b></div>
+    </div></div>`}
     ${c.sizeBlocked ? '<div class="notice warn"><b>Big plans need trust</b>Plans over 6 people need ID or the Regular level (200+ Goodwill). Verify your ID on the Me tab.</div>' : c.size > 6 ? `<p class="small muted" style="margin:0">Plans over 6 people need ID or the Regular level (200+ Goodwill). You have ${fmtPts(S.points)}.</p>` : ''}
     <div id="publishWrap">${publishBtnHTML()}</div>
+  </div>`;
+};
+
+// "Run it again": a copy of one of your plans for the same weekday next week. Posted as a new plan.
+function startClone(id) {
+  const g = findPlan(id);
+  startEdit(id);
+  const d = S.draft;
+  const slot = slotOf(g, NOW);
+  let next = +startOfDay(new Date(+slot.start + 7 * 864e5));
+  while (next <= +startOfDay(NOW)) next += 7 * 864e5;
+  Object.assign(d, { editingId: null, clonedFrom: id, day: next, days: [...new Set([next, ...blankDraft().days])].sort((a, b) => a - b), have: 1, seek: g.size - 1 });
+  render();
+  toast('A copy for next week. Check the details, then post.');
+}
+
+function saveEdit(d) {
+  const g = findPlan(d.editingId);
+  const v = VENUE[d.venueId];
+  const day = new Date(d.day);
+  const before = { when: fmtSlot(slotOf(g, NOW), NOW), venue: g.venue, meet: g.meet, size: g.size, skill: g.skill, title: g.title };
+  Object.assign(g, {
+    title: d.title.trim(), note: d.note.trim(), bring: d.bring.trim(), meet: d.meet.trim(), directions: d.directions.trim(),
+    venueId: v.id, venue: v.name, place: v.suburb, alcohol: !!v.alcohol, slots: [{ start: at(day, d.start), end: at(day, d.start + d.dur) }],
+    size: d.have + d.seek, skill: d.skill, approve: d.approve, visibility: d.visibility, act: d.act,
+  });
+  delete g.when;
+  const changes = [];
+  if (before.title !== g.title) changes.push(`the title to "${g.title}"`);
+  if (before.when !== fmtSlot(slotOf(g, NOW), NOW)) changes.push(`the time to ${fmtSlot(slotOf(g, NOW), NOW)}`);
+  if (before.venue !== g.venue) changes.push(`the venue to ${g.venue}`);
+  if (before.meet !== g.meet) changes.push(`the meeting point to "${g.meet}"`);
+  if (before.size !== g.size) changes.push(`the spots to ${g.size}`);
+  if (before.skill !== g.skill) changes.push(`the level to ${cap(g.skill)}`);
+  if (changes.length) postSys(g.id, `${ME.name} changed ${changes.join(', ')}`);
+  S.draft = null;
+  S.stack.pop();
+  render();
+  toast(changes.length ? 'Saved. Everyone in the plan has been told what changed.' : 'Saved.');
+}
+
+// ---------- every field on a plan ----------
+
+// The fields every plan has. `by`: organiser (set when creating or editing) or keen (worked out).
+const EVENT_FIELDS = [
+  { key: 'title', field: 'title', label: 'Title', by: 'organiser', required: true, rule: 'Up to 60 characters.', value: (g) => esc(g.title) },
+  { key: 'act', field: 'activity_id', label: 'Activity', by: 'organiser', required: true, rule: 'From the tag list. Locked once someone else has joined.', value: (g) => esc(ACT[g.act].label) },
+  { key: 'note', field: 'description', label: 'Details', by: 'organiser', rule: "Up to 200 characters. Screened: no contact details or payment talk. Don't repeat live numbers like spots left; the app shows those.", value: (g) => esc(g.note || '–') },
+  { key: 'skill', field: 'level', label: 'Level', by: 'organiser', required: true, rule: 'Beginner, Casual, Intermediate or Competitive.', value: (g) => levelLabel(g.skill) },
+  { key: 'venueId', field: 'venue_id', label: 'Venue', by: 'organiser', required: true, rule: 'A public venue from the list. Never a home.', value: (g) => `${esc(g.venue)}<br><span class="small muted">${esc((VENUE[g.venueId] || {}).address || '')}</span>` },
+  { key: 'meet', field: 'meeting_point', label: 'Meeting point', by: 'organiser', required: true, rule: 'Up to 80 characters. Prefilled from the venue. Only people in the thread see it.', value: (g) => esc(g.meet) },
+  { key: 'directions', field: 'directions', label: 'Getting there', by: 'organiser', rule: 'Up to 300 characters. Prefilled with transport and parking from the venue.', value: (g) => esc(g.directions || '–') },
+  { key: 'bring', field: 'bring', label: 'What to bring', by: 'organiser', rule: 'Up to 80 characters.', value: (g) => esc(g.bring || '–') },
+  { key: 'starts', field: 'starts_at / ends_at', label: 'When', by: 'organiser', required: true, rule: 'Starts at least 1 hour from now and within 60 days. Lasts 1, 1.5, 2 or 3 hours.', value: (g) => esc(fmtSlot(slotOf(g, NOW), NOW)) },
+  { key: 'size', field: 'capacity', label: 'Spots', by: 'organiser', required: true, rule: '2 to 30, including the organiser and anyone they bring. Can\'t go below the number already going. Over 6 needs ID or the Regular level.', value: (g) => String(g.size) },
+  { key: 'approve', field: 'join_mode', label: 'Joining', by: 'organiser', required: true, rule: 'approve (organiser confirms, the default) or open (anyone joins straight away).', value: (g) => (g.approve ? 'Organiser confirms' : 'Open') },
+  { key: 'visibility', field: 'visibility', label: 'Who can find it', by: 'organiser', required: true, rule: 'public (Explore, search and suggestions nearby) or invite (only people invited).', value: (g) => (g.visibility === 'invite' ? 'Only people invited' : 'Anyone nearby') },
+  { key: 'status', field: 'status', label: 'Status', by: 'keen', rule: 'Open, Full (no spots), Happening now (from 30 minutes before), Finished, or Cancelled by the organiser.', value: (g) => planStatusLabel(g) },
+  { key: 'going', field: 'going / interested / waitlist', label: 'People', by: 'keen', rule: 'Counted from memberships.', value: (g) => `${g.members.length} going · ${(g.interested || []).filter((m) => !g.members.includes(m)).length} interested · ${Math.max(0, g.size - g.members.length)} spots left` },
+  { key: 'traits', field: 'traits', label: 'Traits', by: 'keen', rule: 'From the activity, venue and time. Matched against people\'s private avoid lists.', value: (g) => planTraits(g, NOW).map((t) => (AVOIDS.find((a) => a.id === t) || {}).label).join(', ') || 'None' },
+  { key: 'bucket', field: 'time_bucket', label: 'Time bucket', by: 'keen', rule: 'Weekday or weekend, morning or afternoon/evening. Matched against people\'s free times.', value: (g) => (AVAILABILITY.find((a) => a.id === bucketOf(slotOf(g, NOW).start)) || {}).label },
+  { key: 'organiser', field: 'organiser_id', label: 'Organiser', by: 'keen', rule: 'Whoever created it.', value: (g) => (g.org === 'me' ? 'You' : esc(PERSON[g.org].name)) },
+];
+
+function planStatusLabel(g) {
+  if (g.status === 'cancelled') return 'Cancelled';
+  const phase = g.past ? 'done' : eventPhase(g, NOW);
+  if (phase === 'done') return 'Finished';
+  if (phase === 'live') return 'Happening now';
+  return g.members.length >= g.size ? 'Full' : 'Open';
+}
+
+VIEWS.planData = ({ v: id }) => {
+  const g = findPlan(id);
+  const host = g.org === 'me' && !g.past && g.status !== 'cancelled';
+  const group = (by, title, sub) => `<section class="pf-group"><div><h3 class="h3">${title}</h3><p class="small muted" style="margin:2px 0 0">${sub}</p></div>
+    ${EVENT_FIELDS.filter((f) => f.by === by).map((f) => `<div class="pf-field"><div class="row"><b class="grow">${esc(f.label)}</b>${f.required ? '<span class="req">required</span>' : ''}<code class="fkey">${f.field}</code></div>
+      <div class="calc">${f.value(g)}</div><p class="small muted" style="margin:0">${esc(f.rule)}</p></div>`).join('')}</section>`;
+  return bar('Plan data') + `<div class="pad">
+    <p class="small muted" style="margin:0">Every field on "${esc(g.title)}", with its value and what's allowed.</p>
+    ${host ? `<button type="button" class="btn block" data-act="edit-plan" data-v="${id}">Edit plan</button>` : ''}
+    ${group('organiser', 'Set by the organiser', 'Chosen when the plan is created, and editable by them until it starts.')}
+    ${group('keen', 'Worked out by Keen', "Calculated from people, time and place. Nobody types these in.")}
   </div>`;
 };
 
@@ -188,6 +293,8 @@ function simulateRequests(plan, candidates) {
 
 Object.assign(ACTIONS, {
   create: () => startComposeBlank(),
+  'edit-plan': (v) => startEdit(v),
+  'plan-data': (v) => go('planData', v),
   compose: () => startCompose(currentIntent()),
   'compose-from-results': () => startCompose(S.intent),
   'd-act': (v) => {
@@ -213,9 +320,11 @@ Object.assign(ACTIONS, {
     render(true);
   },
   'd-approve': (v, el) => { S.draft.approve = el.checked; },
+  'd-vis': (v) => { S.draft.visibility = v; render(true); },
   publish: () => {
     const d = S.draft;
     if (!draftCheck(d).ok) return;
+    if (d.editingId) { saveEdit(d); return; }
     const day = new Date(d.day);
     const v = VENUE[d.venueId];
     const reach = match(draftIntent(d), { now: NOW });
@@ -224,8 +333,8 @@ Object.assign(ACTIONS, {
       id, mine: true, posted: true, org: 'me', act: d.act, title: d.title.trim(), venueId: v.id, venue: v.name, place: v.suburb, alcohol: !!v.alcohol,
       meet: d.meet.trim(), directions: d.directions.trim(), bring: d.bring.trim(), note: d.note.trim(),
       slots: [{ start: at(day, d.start), end: at(day, d.start + d.dur) }], members: ['me', ...FRIENDS.slice(0, d.have - 1).map((f) => f.id)], interested: [],
-      size: d.have + d.seek, skill: d.skill, approve: d.approve, status: 'open',
-      sent: reach.people.length + reach.passive.length, seen: 0, keen: 0, passed: 0, requests: [],
+      size: d.have + d.seek, skill: d.skill, approve: d.approve, status: 'open', visibility: d.visibility,
+      sent: reach.people.length + reach.passive.length, seen: 0, keen: 0, passed: 0, requests: [], clonedFrom: d.clonedFrom || null,
     };
     S.myPlans.unshift(plan);
     S.chat[id] = [{ sys: true, text: `Plan posted. People who are interested or going can chat here.${plan.members.length > 1 ? ` ${plan.members.slice(1).map((m) => PERSON[m].name).join(' and ')} ${plan.members.length > 2 ? 'are' : 'is'} in with you.` : ''}`, at: new Date() }];
